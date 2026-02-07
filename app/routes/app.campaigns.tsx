@@ -29,6 +29,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopHost = `https://${shop}`;
   const advertorialsWithUrls = advertorials.map((a) => ({
     ...a,
+    isRunning: !!a.shopifyPageUrl,
     livePageUrl: a.shopifyPageUrl
       ? a.shopifyPageUrl.startsWith("http")
         ? a.shopifyPageUrl
@@ -39,14 +40,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return json({ advertorials: advertorialsWithUrls });
 };
 
-export default function Index() {
+export default function Campaigns() {
   const { advertorials } = useLoaderData<typeof loader>();
 
   return (
     <Page>
-      <TitleBar title="Advertorials">
+      <TitleBar title="Campaigns">
         <Link to="/app/new">
-          <Button variant="primary">Create Advertorial</Button>
+          <Button variant="primary">Create Campaign</Button>
         </Link>
       </TitleBar>
       <Layout>
@@ -54,9 +55,9 @@ export default function Index() {
           {advertorials.length === 0 ? (
             <Card>
               <EmptyState
-                heading="Create your first advertorial"
+                heading="Create your first campaign"
                 action={{
-                  content: "Create Advertorial",
+                  content: "Create Campaign",
                   url: "/app/new",
                 }}
                 image="https://cdn.shopify.com/s/files/1/0757/9955/files/empty-state.svg"
@@ -70,10 +71,10 @@ export default function Index() {
           ) : (
             <Card>
               <ResourceList
-                resourceName={{ singular: "advertorial", plural: "advertorials" }}
+                resourceName={{ singular: "campaign", plural: "campaigns" }}
                 items={advertorials}
                 renderItem={(item) => {
-                  const { id, title, productTitle, template, angle, livePageUrl, createdAt } = item;
+                  const { id, title, productTitle, template, angle, livePageUrl, isRunning, createdAt } = item;
                   return (
                     <ResourceItem
                       id={id}
@@ -91,6 +92,11 @@ export default function Index() {
                             </Text>
                             <Badge>{template}</Badge>
                             <Badge tone="info">{angle}</Badge>
+                            {isRunning ? (
+                              <Badge tone="success">Running</Badge>
+                            ) : (
+                              <Badge tone="attention">Draft</Badge>
+                            )}
                           </InlineStack>
                           {livePageUrl && (
                             <Text variant="bodySm" as="p">

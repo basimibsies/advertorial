@@ -1,0 +1,23 @@
+# Fly.io app config for Advertorial Shopify app
+# Replace 'advertorial' with your desired app name when running: fly apps create advertorial
+# Or run: fly launch --no-deploy  to generate this file and attach Postgres
+
+app = "advertorial"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

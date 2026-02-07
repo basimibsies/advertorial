@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 RUN apk add --no-cache openssl
 
 EXPOSE 3000
@@ -16,6 +16,9 @@ RUN npm remove @shopify/cli
 
 COPY . .
 
+# Prisma generate needs DATABASE_URL set (schema uses env); no real DB required at build time
+ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
+RUN npx prisma generate
 RUN npm run build
 
 CMD ["npm", "run", "docker-start"]

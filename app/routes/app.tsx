@@ -24,6 +24,7 @@ export default function App() {
         <Link to="/app" rel="home">
           Advertorials
         </Link>
+        <Link to="/app/campaigns">Campaigns</Link>
         <Link to="/app/experiments">Experiments</Link>
         <Link to="/app/analytics">Analytics</Link>
         <Link to="/app/integrations">Integrations</Link>

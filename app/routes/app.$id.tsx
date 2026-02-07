@@ -37,7 +37,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Not Found", { status: 404 });
   }
 
-  return json({ advertorial });
+  // Ensure live page URL is absolute (fixes older records stored as /pages/...)
+  const shopHost = `https://${session.shop}`;
+  const livePageUrl = advertorial.shopifyPageUrl?.startsWith("http")
+    ? advertorial.shopifyPageUrl
+    : advertorial.shopifyPageUrl
+      ? `${shopHost}${advertorial.shopifyPageUrl.startsWith("/") ? "" : "/"}${advertorial.shopifyPageUrl}`
+      : null;
+
+  return json({ advertorial: { ...advertorial, livePageUrl } });
 };
 
 export default function AdvertorialDetail() {
@@ -45,9 +53,11 @@ export default function AdvertorialDetail() {
   const appBridge = useAppBridge();
   const [copied, setCopied] = useState(false);
 
+  const liveUrl = (advertorial as { livePageUrl?: string | null }).livePageUrl ?? advertorial.shopifyPageUrl;
+
   const copyUrl = () => {
-    if (advertorial.shopifyPageUrl) {
-      navigator.clipboard.writeText(advertorial.shopifyPageUrl);
+    if (liveUrl) {
+      navigator.clipboard.writeText(liveUrl);
       setCopied(true);
       appBridge.toast.show("URL copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
@@ -57,9 +67,9 @@ export default function AdvertorialDetail() {
   return (
     <Page>
       <TitleBar title={advertorial.title}>
-        {advertorial.shopifyPageUrl && (
+        {liveUrl && (
           <Button
-            url={advertorial.shopifyPageUrl}
+            url={liveUrl}
             target="_blank"
             variant="primary"
           >
@@ -84,12 +94,12 @@ export default function AdvertorialDetail() {
                 <Text variant="bodyMd" tone="subdued" as="p">
                   Product: {advertorial.productTitle}
                 </Text>
-                {advertorial.shopifyPageUrl ? (
+                {liveUrl ? (
                   <Banner status="success" title="Published">
                     <p>
                       This advertorial has been published.{" "}
                       <a
-                        href={advertorial.shopifyPageUrl}
+                        href={liveUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
@@ -112,7 +122,7 @@ export default function AdvertorialDetail() {
                 }}
                 dangerouslySetInnerHTML={{ __html: advertorial.content }}
               />
-              {advertorial.shopifyPageUrl && (
+              {liveUrl && (
                 <BlockStack gap="300">
                   <Text variant="bodyMd" fontWeight="medium" as="p">
                     Live URL (copy to use in ads):
@@ -120,7 +130,7 @@ export default function AdvertorialDetail() {
                   <InlineStack gap="200" blockAlign="center">
                     <div style={{ flex: 1 }}>
                       <TextField
-                        value={advertorial.shopifyPageUrl}
+                        value={liveUrl}
                         readOnly
                         autoComplete="off"
                       />
@@ -132,9 +142,9 @@ export default function AdvertorialDetail() {
                 </BlockStack>
               )}
               <InlineStack gap="300">
-                {advertorial.shopifyPageUrl && (
+                {liveUrl && (
                   <Button
-                    url={advertorial.shopifyPageUrl}
+                    url={liveUrl}
                     target="_blank"
                     variant="primary"
                   >

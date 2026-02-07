@@ -50,86 +50,73 @@ function generateStoryTemplate(
     ? `Transform Your Life with ${productTitle}`
     : `${productTitle}: The Better Choice`;
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(title)}</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; background-color: #fff;">
-  <div style="max-width: 800px; margin: 0 auto; padding: 40px 20px;">
-    <header style="text-align: center; margin-bottom: 60px;">
-      <h1 style="font-size: 2.5rem; font-weight: 700; margin: 0 0 20px 0; color: #000; line-height: 1.2;">
-        ${escapeHtml(title)}
-      </h1>
-    </header>
+  // Clean HTML content — no document wrapper since the store theme provides <html>, <head>, <body>
+  const html = `<div style="max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: inherit; line-height: 1.6; color: #333;">
+  <header style="text-align: center; margin-bottom: 60px;">
+    <h1 style="font-size: 2.5rem; font-weight: 700; margin: 0 0 20px 0; color: #000; line-height: 1.2;">
+      ${escapeHtml(title)}
+    </h1>
+  </header>
 
-    <section style="margin-bottom: 50px;">
-      <p style="font-size: 1.25rem; color: #666; margin-bottom: 30px; font-weight: 300;">
-        ${escapeHtml(angleContent.hook)}
-      </p>
-      <p style="font-size: 1.1rem; color: #444; margin-bottom: 30px;">
-        ${escapeHtml(angleContent.problem)}
-      </p>
-      <p style="font-size: 1.1rem; color: #444; margin-bottom: 30px;">
-        ${escapeHtml(angleContent.solution)}
-      </p>
-    </section>
+  <section style="margin-bottom: 50px;">
+    <p style="font-size: 1.25rem; color: #666; margin-bottom: 30px; font-weight: 300;">
+      ${escapeHtml(angleContent.hook)}
+    </p>
+    <p style="font-size: 1.1rem; color: #444; margin-bottom: 30px;">
+      ${escapeHtml(angleContent.problem)}
+    </p>
+    <p style="font-size: 1.1rem; color: #444; margin-bottom: 30px;">
+      ${escapeHtml(angleContent.solution)}
+    </p>
+  </section>
 
-    <section style="margin-bottom: 50px; padding: 30px; background-color: #f8f9fa; border-radius: 8px;">
-      <h2 style="font-size: 1.75rem; margin: 0 0 20px 0; color: #000;">
-        Introducing ${escapeHtml(productTitle)}
-      </h2>
-      ${productDescription ? `<p style="font-size: 1rem; color: #555; margin-bottom: 20px;">${escapeHtml(productDescription)}</p>` : ""}
-      <p style="font-size: 1rem; color: #555;">
-        ${angle === "Pain" 
-          ? "Stop settling for less. Experience the difference that quality makes."
-          : angle === "Desire"
-          ? "Join thousands who have already transformed their lives. Your journey starts here."
-          : "See why smart customers choose us over the competition. The proof is in the results."}
-      </p>
-    </section>
+  <section style="margin-bottom: 50px; padding: 30px; background-color: #f8f9fa; border-radius: 8px;">
+    <h2 style="font-size: 1.75rem; margin: 0 0 20px 0; color: #000;">
+      Introducing ${escapeHtml(productTitle)}
+    </h2>
+    ${productDescription ? `<p style="font-size: 1rem; color: #555; margin-bottom: 20px;">${escapeHtml(productDescription)}</p>` : ""}
+    <p style="font-size: 1rem; color: #555;">
+      ${angle === "Pain" 
+        ? "Stop settling for less. Experience the difference that quality makes."
+        : angle === "Desire"
+        ? "Join thousands who have already transformed their lives. Your journey starts here."
+        : "See why smart customers choose us over the competition. The proof is in the results."}
+    </p>
+  </section>
 
-    <section style="margin-bottom: 50px;">
-      <h2 style="font-size: 1.75rem; margin: 0 0 20px 0; color: #000;">
-        Why ${escapeHtml(productTitle)} Works
-      </h2>
-      <ul style="list-style: none; padding: 0; margin: 0;">
-        <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
-          <strong style="color: ${primaryColor};">Proven Results</strong>
-          <p style="margin: 5px 0 0 0; color: #666;">Backed by real customer success stories and measurable outcomes.</p>
-        </li>
-        <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
-          <strong style="color: ${primaryColor};">Quality You Can Trust</strong>
-          <p style="margin: 5px 0 0 0; color: #666;">Crafted with attention to detail and built to last.</p>
-        </li>
-        <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
-          <strong style="color: ${primaryColor};">Designed for You</strong>
-          <p style="margin: 5px 0 0 0; color: #666;">Created with your needs in mind, not a one-size-fits-all approach.</p>
-        </li>
-      </ul>
-    </section>
+  <section style="margin-bottom: 50px;">
+    <h2 style="font-size: 1.75rem; margin: 0 0 20px 0; color: #000;">
+      Why ${escapeHtml(productTitle)} Works
+    </h2>
+    <ul style="list-style: none; padding: 0; margin: 0;">
+      <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
+        <strong style="color: ${primaryColor};">Proven Results</strong>
+        <p style="margin: 5px 0 0 0; color: #666;">Backed by real customer success stories and measurable outcomes.</p>
+      </li>
+      <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
+        <strong style="color: ${primaryColor};">Quality You Can Trust</strong>
+        <p style="margin: 5px 0 0 0; color: #666;">Crafted with attention to detail and built to last.</p>
+      </li>
+      <li style="padding: 15px 0; border-bottom: 1px solid #eee;">
+        <strong style="color: ${primaryColor};">Designed for You</strong>
+        <p style="margin: 5px 0 0 0; color: #666;">Created with your needs in mind, not a one-size-fits-all approach.</p>
+      </li>
+    </ul>
+  </section>
 
-    <section style="text-align: center; margin: 60px 0; padding: 40px 20px; background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); border-radius: 12px;">
-      <h2 style="font-size: 2rem; margin: 0 0 20px 0; color: #fff; font-weight: 700;">
-        Ready to Get Started?
-      </h2>
-      <p style="font-size: 1.1rem; color: #fff; margin-bottom: 30px; opacity: 0.95;">
-        Don't wait another day. ${angle === "Pain" ? "Solve your problem now." : angle === "Desire" ? "Start your transformation today." : "Make the smart choice."}
-      </p>
-      <a href="/products/${escapeHtml(productTitle.toLowerCase().replace(/\s+/g, "-"))}" 
-         style="display: inline-block; padding: 18px 40px; background-color: #fff; color: ${primaryColor}; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 1.1rem; transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        Shop ${escapeHtml(productTitle)} Now
-      </a>
-    </section>
-
-    <footer style="text-align: center; margin-top: 60px; padding-top: 40px; border-top: 1px solid #eee; color: #999; font-size: 0.9rem;">
-      <p style="margin: 0;">© ${new Date().getFullYear()} ${escapeHtml(productTitle)}. All rights reserved.</p>
-    </footer>
-  </div>
-</body>
-</html>`;
+  <section style="text-align: center; margin: 60px 0; padding: 40px 20px; background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); border-radius: 12px;">
+    <h2 style="font-size: 2rem; margin: 0 0 20px 0; color: #fff; font-weight: 700;">
+      Ready to Get Started?
+    </h2>
+    <p style="font-size: 1.1rem; color: #fff; margin-bottom: 30px; opacity: 0.95;">
+      Don't wait another day. ${angle === "Pain" ? "Solve your problem now." : angle === "Desire" ? "Start your transformation today." : "Make the smart choice."}
+    </p>
+    <a href="/products/${escapeHtml(productTitle.toLowerCase().replace(/\s+/g, "-"))}" 
+       style="display: inline-block; padding: 18px 40px; background-color: #fff; color: ${primaryColor}; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+      Shop ${escapeHtml(productTitle)} Now
+    </a>
+  </section>
+</div>`;
 
   return { title, html };
 }
@@ -190,71 +177,59 @@ function generateListicleTemplate(
   };
 
   const items = angleContent.items;
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(angleContent.title)}</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; background-color: #fff;">
-  <div style="max-width: 800px; margin: 0 auto; padding: 40px 20px;">
-    <header style="text-align: center; margin-bottom: 60px;">
-      <h1 style="font-size: 2.5rem; font-weight: 700; margin: 0 0 20px 0; color: #000; line-height: 1.2;">
-        ${escapeHtml(angleContent.title)}
-      </h1>
-    </header>
 
-    <section style="margin-bottom: 50px;">
-      <p style="font-size: 1.25rem; color: #666; margin-bottom: 30px; font-weight: 300;">
-        ${escapeHtml(angleContent.intro)}
-      </p>
-      ${productDescription ? `<p style="font-size: 1.1rem; color: #444; margin-bottom: 30px; padding: 20px; background-color: #f8f9fa; border-left: 4px solid ${primaryColor}; border-radius: 4px;">${escapeHtml(productDescription)}</p>` : ""}
-    </section>
+  // Clean HTML content — no document wrapper since the store theme provides <html>, <head>, <body>
+  const html = `<div style="max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: inherit; line-height: 1.6; color: #333;">
+  <header style="text-align: center; margin-bottom: 60px;">
+    <h1 style="font-size: 2.5rem; font-weight: 700; margin: 0 0 20px 0; color: #000; line-height: 1.2;">
+      ${escapeHtml(angleContent.title)}
+    </h1>
+  </header>
 
-    <section style="margin-bottom: 50px;">
-      ${items.map((item, index) => `
-        <div style="margin-bottom: 40px; padding-bottom: 30px; border-bottom: ${index < items.length - 1 ? "1px solid #eee" : "none"};">
-          <div style="display: flex; align-items: flex-start; gap: 20px;">
-            <div style="flex-shrink: 0; width: 50px; height: 50px; background-color: ${primaryColor}; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700;">
-              ${index + 1}
-            </div>
-            <div style="flex: 1;">
-              <h2 style="font-size: 1.5rem; margin: 0 0 15px 0; color: #000; font-weight: 600;">
-                ${escapeHtml(item.title)}
-              </h2>
-              <p style="font-size: 1rem; color: #555; margin: 0; line-height: 1.7;">
-                ${escapeHtml(item.desc)}
-              </p>
-            </div>
+  <section style="margin-bottom: 50px;">
+    <p style="font-size: 1.25rem; color: #666; margin-bottom: 30px; font-weight: 300;">
+      ${escapeHtml(angleContent.intro)}
+    </p>
+    ${productDescription ? `<p style="font-size: 1.1rem; color: #444; margin-bottom: 30px; padding: 20px; background-color: #f8f9fa; border-left: 4px solid ${primaryColor}; border-radius: 4px;">${escapeHtml(productDescription)}</p>` : ""}
+  </section>
+
+  <section style="margin-bottom: 50px;">
+    ${items.map((item, index) => `
+      <div style="margin-bottom: 40px; padding-bottom: 30px; border-bottom: ${index < items.length - 1 ? "1px solid #eee" : "none"};">
+        <div style="display: flex; align-items: flex-start; gap: 20px;">
+          <div style="flex-shrink: 0; width: 50px; height: 50px; background-color: ${primaryColor}; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700;">
+            ${index + 1}
+          </div>
+          <div style="flex: 1;">
+            <h2 style="font-size: 1.5rem; margin: 0 0 15px 0; color: #000; font-weight: 600;">
+              ${escapeHtml(item.title)}
+            </h2>
+            <p style="font-size: 1rem; color: #555; margin: 0; line-height: 1.7;">
+              ${escapeHtml(item.desc)}
+            </p>
           </div>
         </div>
-      `).join("")}
-    </section>
+      </div>
+    `).join("")}
+  </section>
 
-    <section style="text-align: center; margin: 60px 0; padding: 40px 20px; background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); border-radius: 12px;">
-      <h2 style="font-size: 2rem; margin: 0 0 20px 0; color: #fff; font-weight: 700;">
-        Ready to Experience the Difference?
-      </h2>
-      <p style="font-size: 1.1rem; color: #fff; margin-bottom: 30px; opacity: 0.95;">
-        ${angle === "Pain" 
-          ? "Stop struggling and start solving. Your solution is just one click away."
-          : angle === "Desire"
-          ? "Your transformation begins today. Take the first step now."
-          : "Join the smart customers who choose quality. Make the switch today."}
-      </p>
-      <a href="/products/${escapeHtml(productTitle.toLowerCase().replace(/\s+/g, "-"))}" 
-         style="display: inline-block; padding: 18px 40px; background-color: #fff; color: ${primaryColor}; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 1.1rem; transition: transform 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        Get ${escapeHtml(productTitle)} Now
-      </a>
-    </section>
-
-    <footer style="text-align: center; margin-top: 60px; padding-top: 40px; border-top: 1px solid #eee; color: #999; font-size: 0.9rem;">
-      <p style="margin: 0;">© ${new Date().getFullYear()} ${escapeHtml(productTitle)}. All rights reserved.</p>
-    </footer>
-  </div>
-</body>
-</html>`;
+  <section style="text-align: center; margin: 60px 0; padding: 40px 20px; background: linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}dd 100%); border-radius: 12px;">
+    <h2 style="font-size: 2rem; margin: 0 0 20px 0; color: #fff; font-weight: 700;">
+      Ready to Experience the Difference?
+    </h2>
+    <p style="font-size: 1.1rem; color: #fff; margin-bottom: 30px; opacity: 0.95;">
+      ${angle === "Pain" 
+        ? "Stop struggling and start solving. Your solution is just one click away."
+        : angle === "Desire"
+        ? "Your transformation begins today. Take the first step now."
+        : "Join the smart customers who choose quality. Make the switch today."}
+    </p>
+    <a href="/products/${escapeHtml(productTitle.toLowerCase().replace(/\s+/g, "-"))}" 
+       style="display: inline-block; padding: 18px 40px; background-color: #fff; color: ${primaryColor}; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+      Get ${escapeHtml(productTitle)} Now
+    </a>
+  </section>
+</div>`;
 
   return { title: angleContent.title, html };
 }
@@ -272,4 +247,3 @@ export async function generateAdvertorialContent({
     return generateListicleTemplate(productTitle, productDescription, angle, primaryColor);
   }
 }
-

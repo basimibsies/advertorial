@@ -109,6 +109,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Create Shopify page
       const { id: shopifyPageId, url: shopifyPageUrl } = await createShopifyPage(
         admin,
+        session.shop,
         title,
         html
       );

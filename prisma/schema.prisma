@@ -5,12 +5,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+// Local dev: SQLite (no setup). Production: set DATABASE_URL for Postgres on Fly.io.
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -46,5 +44,5 @@ model Advertorial {
   shopifyPageId   String?  // Shopify Page ID after publishing
   shopifyPageUrl  String?  // Live URL of the published page
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt      DateTime @updatedAt
 }

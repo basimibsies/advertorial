@@ -1,0 +1,74 @@
+{% comment %}
+  Advertorial Content Block
+  Renders the advertorial HTML content stored in the page metafield.
+  This block is used by the Advertorial app to display generated
+  advertorial pages within the store's theme (with header, footer, etc).
+{% endcomment %}
+
+{% if page.metafields.advertorial.content %}
+  <div class="advertorial-content" {{ block.shopify_attributes }}>
+    {{ page.metafields.advertorial.content }}
+  </div>
+{% else %}
+  <div class="advertorial-content advertorial-content--empty" {{ block.shopify_attributes }}>
+    <div style="max-width: 800px; margin: 0 auto; padding: 60px 20px; text-align: center;">
+      <p style="font-size: 1.1rem; color: #666;">
+        This advertorial page is being set up. Content will appear here shortly.
+      </p>
+    </div>
+  </div>
+{% endif %}
+
+<style>
+  .advertorial-content {
+    width: 100%;
+  }
+
+  .advertorial-content img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .advertorial-content a {
+    transition: opacity 0.2s ease;
+  }
+
+  .advertorial-content a:hover {
+    opacity: 0.85;
+  }
+</style>
+
+{% schema %}
+{
+  "name": "Advertorial",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "full_width",
+      "label": "Full width",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Top padding",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Bottom padding",
+      "default": 0
+    }
+  ]
+}
+{% endschema %}
