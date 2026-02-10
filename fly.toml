@@ -1,23 +1,23 @@
-# Fly.io app config for Advertorial Shopify app
-# Replace 'advertorial' with your desired app name when running: fly apps create advertorial
-# Or run: fly launch --no-deploy  to generate this file and attach Postgres
+# fly.toml app configuration file generated for app-falling-dew-503 on 2026-02-10T20:31:19Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "advertorial"
+app = 'app-falling-dew-503'
+primary_region = 'iad'
 
 [build]
 
-[env]
-  NODE_ENV = "production"
-
 [http_service]
-  internal_port = 3000
+  internal_port = 8080
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
 [[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
+  memory = '1gb'
+  cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 256

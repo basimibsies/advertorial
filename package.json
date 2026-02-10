@@ -23,6 +23,7 @@
     "node": ">=20.19 <22 || >=22.12"
   },
   "dependencies": {
+    "@flydotio/litestream": "^1.0.1",
     "@prisma/client": "^6.2.1",
     "@remix-run/dev": "^2.16.1",
     "@remix-run/fs-routes": "^2.16.1",
@@ -73,5 +74,8 @@
     "minimatch": "9.0.5",
     "vite": "^6.2.2"
   },
-  "author": "basim"
+  "author": "basim",
+  "dockerfile": {
+    "litestream": true
+  }
 }
