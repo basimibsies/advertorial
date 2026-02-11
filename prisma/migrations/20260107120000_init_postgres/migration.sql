@@ -1,27 +1,29 @@
 -- CreateTable
 CREATE TABLE "Session" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "shop" TEXT NOT NULL,
     "state" TEXT NOT NULL,
-    "isOnline" INTEGER NOT NULL DEFAULT 0,
+    "isOnline" BOOLEAN NOT NULL DEFAULT false,
     "scope" TEXT,
-    "expires" DATETIME,
+    "expires" TIMESTAMP(3),
     "accessToken" TEXT NOT NULL,
-    "userId" INTEGER,
+    "userId" BIGINT,
     "firstName" TEXT,
     "lastName" TEXT,
     "email" TEXT,
-    "accountOwner" INTEGER NOT NULL DEFAULT 0,
+    "accountOwner" BOOLEAN NOT NULL DEFAULT false,
     "locale" TEXT,
-    "collaborator" INTEGER,
-    "emailVerified" INTEGER,
+    "collaborator" BOOLEAN DEFAULT false,
+    "emailVerified" BOOLEAN DEFAULT false,
     "refreshToken" TEXT,
-    "refreshTokenExpires" DATETIME
+    "refreshTokenExpires" TIMESTAMP(3),
+
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Advertorial" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "shop" TEXT NOT NULL,
     "productId" TEXT NOT NULL,
     "productTitle" TEXT NOT NULL,
@@ -32,6 +34,8 @@ CREATE TABLE "Advertorial" (
     "content" TEXT NOT NULL,
     "shopifyPageId" TEXT,
     "shopifyPageUrl" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Advertorial_pkey" PRIMARY KEY ("id")
 );

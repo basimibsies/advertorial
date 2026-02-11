@@ -5,9 +5,8 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Local dev: SQLite (no setup). Production: set DATABASE_URL for Postgres on Fly.io.
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

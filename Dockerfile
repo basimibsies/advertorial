@@ -21,4 +21,8 @@ ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 RUN npx prisma generate
 RUN npm run build
 
+# Bind to 0.0.0.0 so Fly proxy can reach the app
+ENV HOST="0.0.0.0"
+ENV PORT="3000"
+
 CMD ["npm", "run", "docker-start"]

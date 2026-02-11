@@ -2,12 +2,11 @@
 
 client_id = "bf26612d9e549f0ae2f20e000232d1aa"
 name = "advertorial"
-application_url = "https://example.com"
+application_url = "https://advertorial.fly.dev"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
 
 [webhooks]
 api_version = "2026-04"
@@ -25,4 +24,4 @@ api_version = "2026-04"
 scopes = "read_products,write_products,read_content,write_content,read_themes,write_themes"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://advertorial.fly.dev/api/auth/callback" ]
