@@ -19,6 +19,13 @@ export default function App() {
         />
         <Meta />
         <Links />
+        {/* Brief fade-in to prevent FOUC / icon flash before App Bridge is ready */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html:
+              "html{opacity:0;animation:reveal .1s ease-in .15s forwards}@keyframes reveal{to{opacity:1}}",
+          }}
+        />
       </head>
       <body>
         <Outlet />
