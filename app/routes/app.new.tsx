@@ -60,6 +60,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Generate content
       const { title, html } = await generateAdvertorialContent({
         productTitle: product.title,
+        productHandle: product.handle,
         productDescription: product.description,
         template,
         angle,

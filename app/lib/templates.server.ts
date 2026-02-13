@@ -3,6 +3,7 @@ export type AngleType = "Pain" | "Desire" | "Comparison";
 
 interface GenerateContentParams {
   productTitle: string;
+  productHandle: string;
   productDescription?: string;
   template: TemplateType;
   angle: AngleType;
@@ -22,6 +23,7 @@ function escapeHtml(text: string): string {
 
 function generateStoryTemplate(
   productTitle: string,
+  productHandle: string,
   productDescription: string,
   angle: AngleType,
   primaryColor: string,
@@ -111,7 +113,7 @@ function generateStoryTemplate(
     <p style="font-size: 1.1rem; color: #fff; margin-bottom: 30px; opacity: 0.95;">
       Don't wait another day. ${angle === "Pain" ? "Solve your problem now." : angle === "Desire" ? "Start your transformation today." : "Make the smart choice."}
     </p>
-    <a href="/products/${escapeHtml(productTitle.toLowerCase().replace(/\s+/g, "-"))}" 
+    <a href="/products/${escapeHtml(productHandle)}" 
        style="display: inline-block; padding: 18px 40px; background-color: #fff; color: ${primaryColor}; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
       Shop ${escapeHtml(productTitle)} Now
     </a>
@@ -123,6 +125,7 @@ function generateStoryTemplate(
 
 function generateListicleTemplate(
   productTitle: string,
+  productHandle: string,
   productDescription: string,
   angle: AngleType,
   primaryColor: string,
@@ -224,7 +227,7 @@ function generateListicleTemplate(
         ? "Your transformation begins today. Take the first step now."
         : "Join the smart customers who choose quality. Make the switch today."}
     </p>
-    <a href="/products/${escapeHtml(productTitle.toLowerCase().replace(/\s+/g, "-"))}" 
+    <a href="/products/${escapeHtml(productHandle)}" 
        style="display: inline-block; padding: 18px 40px; background-color: #fff; color: ${primaryColor}; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
       Get ${escapeHtml(productTitle)} Now
     </a>
@@ -236,14 +239,15 @@ function generateListicleTemplate(
 
 export async function generateAdvertorialContent({
   productTitle,
+  productHandle,
   productDescription = "",
   template,
   angle,
   primaryColor = "#000000",
 }: GenerateContentParams): Promise<{ title: string; html: string }> {
   if (template === "Story") {
-    return generateStoryTemplate(productTitle, productDescription, angle, primaryColor);
+    return generateStoryTemplate(productTitle, productHandle, productDescription, angle, primaryColor);
   } else {
-    return generateListicleTemplate(productTitle, productDescription, angle, primaryColor);
+    return generateListicleTemplate(productTitle, productHandle, productDescription, angle, primaryColor);
   }
 }

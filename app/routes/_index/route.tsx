@@ -22,9 +22,9 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>Advertorial</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Generate high-converting advertorial pages for your Shopify products in seconds.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -40,16 +40,16 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>One-click page generation</strong>. Choose a product, pick a
+            template and angle, and get a publish-ready advertorial page instantly.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Native Shopify pages</strong>. Published pages use your
+            store's theme with full header, footer, and styles — no external hosting.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Built for ads</strong>. Grab the live URL and drop it into
+            your Meta, TikTok, or Google ad campaigns.
           </li>
         </ul>
       </div>
