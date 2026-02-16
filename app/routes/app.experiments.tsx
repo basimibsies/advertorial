@@ -25,7 +25,7 @@ export default function Experiments() {
           <Card>
             <EmptyState
               heading="Run A/B tests on your advertorials"
-              image="https://cdn.shopify.com/s/files/1/0757/9955/files/empty-state.svg"
+              image="/illustrations/ab-test-empty-state.svg"
             >
               <p>
                 Test different versions of your advertorials to see which ones
