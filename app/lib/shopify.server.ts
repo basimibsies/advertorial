@@ -8,6 +8,15 @@ export interface Product {
   featuredImage?: string;
 }
 
+export interface BrandSettings {
+  primaryColor: string;
+  secondaryColor: string;
+  backgroundColor: string;
+  textColor: string;
+  headerFont: string;
+  bodyFont: string;
+}
+
 export async function getProducts(admin: AdminApiContext): Promise<Product[]> {
   const response = await admin.graphql(
     `#graphql
@@ -45,32 +54,22 @@ export async function getProducts(admin: AdminApiContext): Promise<Product[]> {
   );
 }
 
-export async function getThemeSettings(
-  admin: AdminApiContext,
-): Promise<{ primaryColor?: string; fontFamily?: string }> {
-  try {
-    const response = await admin.graphql(
-      `#graphql
-        query getTheme {
-          themes(first: 1) {
-            edges {
-              node {
-                id
-                name
-              }
-            }
-          }
-        }`,
-    );
-
-    return {
-      primaryColor: undefined,
-      fontFamily: undefined,
-    };
-  } catch (error) {
-    console.error("Error fetching theme settings:", error);
-    return {};
-  }
+/**
+ * Returns brand settings with sensible defaults.
+ * Users can customize colors in the wizard's Brand step.
+ * TODO: Add auto-detection from theme settings_data.json when API version supports it.
+ */
+export async function getBrandSettings(
+  _admin: AdminApiContext,
+): Promise<BrandSettings> {
+  return {
+    primaryColor: "#000000",
+    secondaryColor: "#555555",
+    backgroundColor: "#ffffff",
+    textColor: "#1a1a1a",
+    headerFont: "system-ui, -apple-system, sans-serif",
+    bodyFont: "system-ui, -apple-system, sans-serif",
+  };
 }
 
 /**
@@ -140,12 +139,46 @@ async function ensureMetafieldDefinition(admin: AdminApiContext): Promise<void> 
 }
 
 /**
+ * Fetches the shop's primary domain (custom domain if set, otherwise myshopify.com).
+ * This ensures advertorial URLs use the brand's real domain (e.g. https://gruns.co)
+ * instead of the default .myshopify.com URL.
+ */
+export async function getPrimaryDomain(
+  admin: AdminApiContext,
+  shopFallback: string,
+): Promise<string> {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query {
+          shop {
+            primaryDomain {
+              url
+            }
+          }
+        }`,
+    );
+    const data = await response.json();
+    const domainUrl = data.data?.shop?.primaryDomain?.url;
+    if (domainUrl) {
+      // primaryDomain.url returns something like "https://gruns.co"
+      return domainUrl.replace(/\/$/, ""); // strip trailing slash
+    }
+  } catch (error) {
+    console.error("Error fetching primary domain, falling back to shop:", error);
+  }
+  // Fallback to myshopify.com domain
+  return shopFallback.startsWith("http") ? shopFallback : `https://${shopFallback}`;
+}
+
+/**
  * Creates a Shopify page with the advertorial content stored as a metafield.
  * The page uses the store's theme and the theme app extension renders the content.
  * This approach matches how GemPages/Replo publish pages — content lives in the
  * theme with full access to headers, footers, and store styles.
  *
- * @param shop - The shop domain (e.g. store-name.myshopify.com) so we can build the live storefront URL.
+ * Uses the shop's primary domain (custom domain) for the live URL so brands see
+ * their real URL (e.g. https://gruns.co/pages/first-order-benefits).
  */
 export async function createShopifyPage(
   admin: AdminApiContext,
@@ -158,7 +191,7 @@ export async function createShopifyPage(
   await ensureMetafieldDefinition(admin);
 
   // Generate a handle from title if not provided
-  const pageHandle =
+  const baseHandle =
     handle ||
     title
       .toLowerCase()
@@ -166,57 +199,78 @@ export async function createShopifyPage(
       .replace(/^-+|-+$/g, "")
       .substring(0, 50);
 
-  const response = await admin.graphql(
-    `#graphql
-      mutation pageCreate($page: PageCreateInput!) {
-        pageCreate(page: $page) {
-          page {
-            id
-            title
-            handle
+  // Try creating the page, and if the handle is taken, retry with a unique suffix
+  let pageHandle = baseHandle;
+  let attempts = 0;
+  let page: { id: string; title: string; handle: string } | null = null;
+
+  while (attempts < 3) {
+    const response = await admin.graphql(
+      `#graphql
+        mutation pageCreate($page: PageCreateInput!) {
+          pageCreate(page: $page) {
+            page {
+              id
+              title
+              handle
+            }
+            userErrors {
+              field
+              message
+            }
           }
-          userErrors {
-            field
-            message
-          }
-        }
-      }`,
-    {
-      variables: {
-        page: {
-          title,
-          handle: pageHandle,
-          body: htmlContent, // Keep HTML in body as fallback for themes without the extension
-          isPublished: true,
-          metafields: [
-            {
-              namespace: "advertorial",
-              key: "content",
-              value: htmlContent,
-              type: "multi_line_text_field",
-            },
-          ],
+        }`,
+      {
+        variables: {
+          page: {
+            title,
+            handle: pageHandle,
+            body: htmlContent, // Keep HTML in body as fallback for themes without the extension
+            isPublished: true,
+            metafields: [
+              {
+                namespace: "advertorial",
+                key: "content",
+                value: htmlContent,
+                type: "multi_line_text_field",
+              },
+            ],
+          },
         },
       },
-    },
-  );
-
-  const data = await response.json();
-
-  if (data.data?.pageCreate?.userErrors?.length > 0) {
-    const errors = data.data.pageCreate.userErrors;
-    throw new Error(
-      `Failed to create page: ${errors.map((e: any) => e.message).join(", ")}`,
     );
+
+    const data = await response.json();
+    const userErrors = data.data?.pageCreate?.userErrors || [];
+
+    // Check if the handle is taken — retry with a unique suffix
+    const handleTaken = userErrors.some(
+      (e: any) => e.field?.includes("handle") && /taken/i.test(e.message),
+    );
+
+    if (handleTaken) {
+      attempts++;
+      const suffix = Date.now().toString(36).slice(-4);
+      pageHandle = `${baseHandle}-${suffix}`.substring(0, 60);
+      continue;
+    }
+
+    if (userErrors.length > 0) {
+      throw new Error(
+        `Failed to create page: ${userErrors.map((e: any) => e.message).join(", ")}`,
+      );
+    }
+
+    page = data.data?.pageCreate?.page;
+    break;
   }
 
-  const page = data.data?.pageCreate?.page;
   if (!page) {
-    throw new Error("Failed to create page: No page returned");
+    throw new Error("Failed to create page: Handle is already taken. Please try a different title.");
   }
 
-  // Full storefront URL so "View live page" opens the store, not the app
-  const storefrontHost = shop.startsWith("http") ? shop : `https://${shop}`;
+  // Use the shop's primary/custom domain for the live URL
+  const storefrontHost = await getPrimaryDomain(admin, shop);
   return {
     id: page.id,
     url: `${storefrontHost}/pages/${page.handle}`,
@@ -279,7 +333,7 @@ export async function updateShopifyPage(
   }
 
   const page = data.data?.pageUpdate?.page;
-  const storefrontHost = shop.startsWith("http") ? shop : `https://${shop}`;
+  const storefrontHost = await getPrimaryDomain(admin, shop);
   return {
     url: page?.handle ? `${storefrontHost}/pages/${page.handle}` : "",
   };

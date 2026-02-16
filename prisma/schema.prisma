@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Session {
@@ -39,7 +40,8 @@ model Advertorial {
   template        String   // "Story" or "Listicle"
   angle           String   // "Pain", "Desire", or "Comparison"
   title           String
-  content         String // Generated HTML content
+  content         String // Rendered HTML content
+  blocks          String? // JSON array of blocks (for the block editor)
   shopifyPageId   String?  // Shopify Page ID after publishing
   shopifyPageUrl  String?  // Live URL of the published page
   createdAt       DateTime @default(now())

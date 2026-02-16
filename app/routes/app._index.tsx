@@ -13,19 +13,18 @@ import {
   ResourceList,
   ResourceItem,
   Badge,
-  Icon,
   Box,
   Divider,
   Banner,
   ProgressBar,
 } from "@shopify/polaris";
-import { CheckCircleIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { getPrimaryDomain } from "../lib/shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
   const advertorials = await prisma.advertorial.findMany({
@@ -33,13 +32,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderBy: { createdAt: "desc" },
   });
 
-  const shopHost = `https://${shop}`;
+  const primaryDomain = await getPrimaryDomain(admin, shop);
   const advertorialsWithUrls = advertorials.map((a) => ({
     ...a,
     livePageUrl: a.shopifyPageUrl
       ? a.shopifyPageUrl.startsWith("http")
         ? a.shopifyPageUrl
-        : `${shopHost}${a.shopifyPageUrl.startsWith("/") ? "" : "/"}${a.shopifyPageUrl}`
+        : `${primaryDomain}${a.shopifyPageUrl.startsWith("/") ? "" : "/"}${a.shopifyPageUrl}`
       : null,
   }));
 
@@ -140,10 +139,23 @@ export default function Index() {
                       <InlineStack gap="400" blockAlign="start" wrap={false}>
                         <Box>
                           {step.completed ? (
-                            <Icon
-                              source={CheckCircleIcon}
-                              tone="success"
-                            />
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: 20,
+                                height: 20,
+                                borderRadius: "50%",
+                                backgroundColor: "#008060",
+                                color: "#fff",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                lineHeight: 1,
+                              }}
+                            >
+                              ✓
+                            </span>
                           ) : (
                             <span
                               style={{

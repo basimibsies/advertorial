@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { LoaderFunctionArgs } from "@remix-run/node";
-import { json, useLoaderData, Link } from "@remix-run/react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect, useLoaderData, useNavigation, Form } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -12,14 +12,17 @@ import {
   Badge,
   Banner,
   TextField,
+  Modal,
+  Box,
 } from "@shopify/polaris";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { getPrimaryDomain } from "../lib/shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const { id } = params;
 
   if (!id) {
@@ -37,21 +40,80 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Ensure live page URL is absolute (fixes older records stored as /pages/...)
-  const shopHost = `https://${session.shop}`;
+  // Ensure live page URL uses the shop's primary/custom domain
+  const primaryDomain = await getPrimaryDomain(admin, session.shop);
   const livePageUrl = advertorial.shopifyPageUrl?.startsWith("http")
     ? advertorial.shopifyPageUrl
     : advertorial.shopifyPageUrl
-      ? `${shopHost}${advertorial.shopifyPageUrl.startsWith("/") ? "" : "/"}${advertorial.shopifyPageUrl}`
+      ? `${primaryDomain}${advertorial.shopifyPageUrl.startsWith("/") ? "" : "/"}${advertorial.shopifyPageUrl}`
       : null;
 
   return json({ advertorial: { ...advertorial, livePageUrl } });
 };
 
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { admin, session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  if (intent === "delete") {
+    const { id } = params;
+
+    if (!id) {
+      return json({ error: "Missing ID" }, { status: 400 });
+    }
+
+    const advertorial = await prisma.advertorial.findFirst({
+      where: { id, shop: session.shop },
+    });
+
+    if (!advertorial) {
+      return json({ error: "Advertorial not found" }, { status: 404 });
+    }
+
+    // Delete the Shopify page if it exists
+    if (advertorial.shopifyPageId) {
+      try {
+        await admin.graphql(
+          `#graphql
+            mutation pageDelete($id: ID!) {
+              pageDelete(id: $id) {
+                deletedPageId
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+          { variables: { id: advertorial.shopifyPageId } },
+        );
+      } catch (error) {
+        console.error("Error deleting Shopify page:", error);
+        // Continue with DB deletion even if Shopify page deletion fails
+      }
+    }
+
+    // Delete from database
+    await prisma.advertorial.delete({
+      where: { id },
+    });
+
+    return redirect("/app");
+  }
+
+  return json({ error: "Invalid action" }, { status: 400 });
+};
+
 export default function AdvertorialDetail() {
   const { advertorial } = useLoaderData<typeof loader>();
+  const navigation = useNavigation();
   const appBridge = useAppBridge();
   const [copied, setCopied] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+
+  const isDeleting = navigation.state === "submitting" && navigation.formData?.get("intent") === "delete";
+  const canDelete = deleteConfirmation.toLowerCase() === "delete";
 
   const liveUrl = (advertorial as { livePageUrl?: string | null }).livePageUrl ?? advertorial.shopifyPageUrl;
 
@@ -95,7 +157,7 @@ export default function AdvertorialDetail() {
                   Product: {advertorial.productTitle}
                 </Text>
                 {liveUrl ? (
-                  <Banner status="success" title="Published">
+                  <Banner tone="success" title="Published">
                     <p>
                       This advertorial has been published.{" "}
                       <a
@@ -108,7 +170,7 @@ export default function AdvertorialDetail() {
                     </p>
                   </Banner>
                 ) : (
-                  <Banner status="warning" title="Not Published">
+                  <Banner tone="warning" title="Not Published">
                     <p>This advertorial has not been published yet.</p>
                   </Banner>
                 )}
@@ -130,6 +192,7 @@ export default function AdvertorialDetail() {
                   <InlineStack gap="200" blockAlign="center">
                     <div style={{ flex: 1 }}>
                       <TextField
+                        label=""
                         value={liveUrl}
                         readOnly
                         autoComplete="off"
@@ -159,29 +222,103 @@ export default function AdvertorialDetail() {
           </Card>
         </Layout.Section>
         <Layout.Section variant="oneThird">
-          <Card>
-            <BlockStack gap="300">
-              <Text variant="headingMd" as="h2">
-                Details
-              </Text>
-              <BlockStack gap="200">
-                <Text variant="bodySm" tone="subdued" as="span">
-                  Created: {new Date(advertorial.createdAt).toLocaleString()}
+          <BlockStack gap="400">
+            <Card>
+              <BlockStack gap="300">
+                <Text variant="headingMd" as="h2">
+                  Details
                 </Text>
-                <Text variant="bodySm" tone="subdued" as="span">
-                  Updated: {new Date(advertorial.updatedAt).toLocaleString()}
-                </Text>
-                {advertorial.shopifyPageId && (
+                <BlockStack gap="200">
                   <Text variant="bodySm" tone="subdued" as="span">
-                    Shopify Page ID: {advertorial.shopifyPageId}
+                    Created: {new Date(advertorial.createdAt).toLocaleString()}
                   </Text>
-                )}
+                  <Text variant="bodySm" tone="subdued" as="span">
+                    Updated: {new Date(advertorial.updatedAt).toLocaleString()}
+                  </Text>
+                  {advertorial.shopifyPageId && (
+                    <Text variant="bodySm" tone="subdued" as="span">
+                      Shopify Page ID: {advertorial.shopifyPageId}
+                    </Text>
+                  )}
+                </BlockStack>
               </BlockStack>
-            </BlockStack>
-          </Card>
+            </Card>
+
+            {/* Delete card */}
+            <Card>
+              <BlockStack gap="300">
+                <Text variant="headingMd" as="h2">
+                  Danger zone
+                </Text>
+                <Text variant="bodySm" tone="subdued" as="p">
+                  Permanently delete this advertorial{liveUrl ? " and its published Shopify page" : ""}.
+                  This action cannot be undone.
+                </Text>
+                <Button
+                  tone="critical"
+                  variant="primary"
+                  onClick={() => setDeleteModalOpen(true)}
+                >
+                  Delete advertorial
+                </Button>
+              </BlockStack>
+            </Card>
+          </BlockStack>
         </Layout.Section>
       </Layout>
+
+      {/* Delete confirmation modal */}
+      {deleteModalOpen && (
+        <Modal
+          open={deleteModalOpen}
+          onClose={() => {
+            setDeleteModalOpen(false);
+            setDeleteConfirmation("");
+          }}
+          title="Delete advertorial"
+          primaryAction={{
+            content: isDeleting ? "Deleting..." : "Delete permanently",
+            destructive: true,
+            disabled: !canDelete || isDeleting,
+            onAction: () => {
+              // Submit the hidden form programmatically
+              const form = document.getElementById("delete-form") as HTMLFormElement;
+              if (form) form.requestSubmit();
+            },
+          }}
+          secondaryActions={[
+            {
+              content: "Cancel",
+              onAction: () => {
+                setDeleteModalOpen(false);
+                setDeleteConfirmation("");
+              },
+            },
+          ]}
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              <Text as="p">
+                This will permanently delete <strong>{advertorial.title}</strong>
+                {liveUrl ? " and remove the published page from your Shopify store" : ""}.
+                This cannot be undone.
+              </Text>
+              <TextField
+                label={<>Type <strong>delete</strong> to confirm</>}
+                value={deleteConfirmation}
+                onChange={setDeleteConfirmation}
+                autoComplete="off"
+                placeholder="delete"
+              />
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+      )}
+
+      {/* Hidden delete form */}
+      <Form method="post" id="delete-form" style={{ display: "none" }}>
+        <input type="hidden" name="intent" value="delete" />
+      </Form>
     </Page>
   );
 }
-
