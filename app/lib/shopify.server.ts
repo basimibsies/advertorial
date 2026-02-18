@@ -190,7 +190,7 @@ export async function createShopifyPage(
   // Ensure the metafield definition exists
   await ensureMetafieldDefinition(admin);
 
-  // Generate a handle from title if not provided
+  // Generate a handle from the real title (for readable URLs)
   const baseHandle =
     handle ||
     title

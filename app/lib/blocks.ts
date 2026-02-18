@@ -11,21 +11,27 @@ export interface HeadlineBlock {
   id: string;
   text: string;
   size: "large" | "medium" | "small";
+  align?: "left" | "center";
+  subheadline?: string;
 }
 
 export interface TextBlock {
   type: "text";
   id: string;
   content: string; // supports basic HTML: <strong>, <em>, <br>
+  variant?: "default" | "large-intro" | "pull-quote";
 }
 
 export interface ImageBlock {
   type: "image";
   id: string;
-  label: string; // e.g. "Insert hero product shot"
-  hint: string; // e.g. "Clean product photography — show quality and detail"
-  src?: string; // optional: actual image URL if uploaded
-  height?: string; // e.g. "280px"
+  label: string;
+  hint: string;
+  src?: string;
+  height?: string;
+  placement?: "main" | "sidebar";
+  caption?: string;
+  rounded?: boolean;
 }
 
 export interface CtaBlock {
@@ -34,15 +40,16 @@ export interface CtaBlock {
   headline: string;
   subtext: string;
   buttonText: string;
-  style: "primary" | "inline"; // primary = big gradient, inline = simple button
+  style: "primary" | "inline";
+  variant?: "gradient" | "solid" | "outline";
 }
 
 export interface SocialProofBlock {
   type: "socialProof";
   id: string;
-  rating: string; // e.g. "4.8"
-  reviewCount: string; // e.g. "57K+"
-  customerCount: string; // e.g. "2M+"
+  rating: string;
+  reviewCount: string;
+  customerCount: string;
 }
 
 export interface StatsBlock {
@@ -50,6 +57,7 @@ export interface StatsBlock {
   id: string;
   heading?: string;
   stats: { value: string; label: string }[];
+  layout?: "grid" | "horizontal";
 }
 
 export interface TestimonialsBlock {
@@ -57,13 +65,15 @@ export interface TestimonialsBlock {
   id: string;
   heading?: string;
   testimonials: { quote: string; name: string; detail: string }[];
+  layout?: "grid" | "stacked";
+  showStars?: boolean;
 }
 
 export interface NumberedSectionBlock {
   type: "numberedSection";
   id: string;
-  number: string; // "01", "02"
-  label: string; // "THE PROBLEM", "REASON 1"
+  number: string;
+  label: string;
   headline: string;
   body: string;
   imageLabel?: string;
@@ -94,7 +104,8 @@ export interface TimelineBlock {
 export interface GuaranteeBlock {
   type: "guarantee";
   id: string;
-  text: string; // e.g. "30-Day Money Back Guarantee · Free Shipping · Secure Checkout"
+  text: string;
+  badges?: { icon: string; label: string }[];
 }
 
 export interface DividerBlock {
@@ -119,17 +130,19 @@ export interface FaqBlock {
 export interface AsSeenInBlock {
   type: "asSeenIn";
   id: string;
-  publications: string[]; // e.g. ["VOGUE", "ELLE", "Forbes"]
+  publications: string[];
 }
 
 export interface AuthorBylineBlock {
   type: "authorByline";
   id: string;
   author: string;
-  role?: string; // e.g. "Health Editor"
-  date: string; // e.g. "January 27, 2026"
-  category?: string; // e.g. "HEALTH TIP"
-  publicationName?: string; // e.g. "Wellness Daily"
+  role?: string;
+  date: string;
+  category?: string;
+  publicationName?: string;
+  viewCount?: string;
+  liveViewers?: string;
 }
 
 export interface FeatureListBlock {
@@ -137,7 +150,7 @@ export interface FeatureListBlock {
   id: string;
   heading?: string;
   items: string[];
-  icon?: string; // default "✓"
+  icon?: string;
 }
 
 export interface OfferBoxBlock {
@@ -146,9 +159,10 @@ export interface OfferBoxBlock {
   headline: string;
   subtext: string;
   buttonText: string;
-  discount?: string; // e.g. "40% OFF"
-  guarantee?: string; // e.g. "30-Day Money-Back Guarantee"
-  urgency?: string; // e.g. "Limited time offer - Only available while supplies last"
+  discount?: string;
+  guarantee?: string;
+  urgency?: string;
+  layout?: "stacked" | "horizontal";
 }
 
 export interface CommentsBlock {
@@ -160,6 +174,8 @@ export interface CommentsBlock {
     text: string;
     likes?: string;
     timeAgo: string;
+    isVerified?: boolean;
+    isReply?: boolean;
   }[];
 }
 
@@ -217,7 +233,7 @@ export const BLOCK_CATALOG: BlockCatalogEntry[] = [
   { type: "comparison", label: "Comparison Table", description: "Us vs. them comparison", icon: "⚖️" },
   { type: "prosCons", label: "Pros & Cons", description: "Pros and cons list", icon: "✅" },
   { type: "timeline", label: "Timeline", description: "Step-by-step progression", icon: "📅" },
-  { type: "guarantee", label: "Guarantee", description: "Money-back guarantee bar", icon: "🛡️" },
+  { type: "guarantee", label: "Guarantee", description: "Trust badges & guarantee bar", icon: "🛡️" },
   { type: "divider", label: "Divider", description: "Visual separator", icon: "➖" },
   { type: "note", label: "Callout Note", description: "Highlighted callout box", icon: "📌" },
   { type: "faq", label: "FAQ", description: "Frequently asked questions accordion", icon: "❓" },
@@ -244,19 +260,19 @@ export function createEmptyBlock(type: BlockType): Block {
 
   switch (type) {
     case "headline":
-      return { type, id, text: "Your Headline Here", size: "large" };
+      return { type, id, text: "Your Headline Here", size: "large", align: "left" };
     case "text":
-      return { type, id, content: "Write your content here..." };
+      return { type, id, content: "Write your content here...", variant: "default" };
     case "image":
-      return { type, id, label: "Insert image here", hint: "Describe what image should go here", height: "280px" };
+      return { type, id, label: "Insert image here", hint: "Describe what image should go here", height: "280px", rounded: true };
     case "cta":
-      return { type, id, headline: "Ready to Get Started?", subtext: "Try it risk-free today.", buttonText: "Shop Now", style: "primary" };
+      return { type, id, headline: "Ready to Get Started?", subtext: "Try it risk-free today.", buttonText: "Shop Now", style: "primary", variant: "gradient" };
     case "socialProof":
       return { type, id, rating: "4.8", reviewCount: "[X]K+", customerCount: "[X]K+" };
     case "stats":
-      return { type, id, stats: [{ value: "[X]%", label: "Describe this stat" }, { value: "[X]%", label: "Describe this stat" }] };
+      return { type, id, stats: [{ value: "[X]%", label: "Describe this stat" }, { value: "[X]%", label: "Describe this stat" }], layout: "grid" };
     case "testimonials":
-      return { type, id, testimonials: [{ quote: "Customer quote here...", name: "[Customer Name]", detail: "Verified Buyer" }] };
+      return { type, id, testimonials: [{ quote: "Customer quote here...", name: "[Customer Name]", detail: "Verified Buyer" }], layout: "grid", showStars: true };
     case "numberedSection":
       return { type, id, number: "01", label: "SECTION", headline: "Section Headline", body: "Section content here..." };
     case "comparison":
@@ -266,7 +282,7 @@ export function createEmptyBlock(type: BlockType): Block {
     case "timeline":
       return { type, id, steps: [{ label: "Step 1", headline: "Headline", body: "Description" }] };
     case "guarantee":
-      return { type, id, text: "30-Day Money Back Guarantee · Free Shipping · Secure Checkout" };
+      return { type, id, text: "30-Day Money Back Guarantee · Free Shipping · Secure Checkout", badges: [{ icon: "🛡️", label: "Money-Back Guarantee" }, { icon: "🚚", label: "Free Shipping" }, { icon: "🔒", label: "Secure Checkout" }] };
     case "divider":
       return { type, id };
     case "note":
@@ -280,9 +296,9 @@ export function createEmptyBlock(type: BlockType): Block {
     case "featureList":
       return { type, id, items: ["Feature one", "Feature two", "Feature three"], icon: "✓" };
     case "offerBox":
-      return { type, id, headline: "Special Offer", subtext: "Try it risk-free today.", buttonText: "Check Availability", discount: "[X]% OFF", guarantee: "30-Day Money-Back Guarantee", urgency: "Limited time offer — while supplies last" };
+      return { type, id, headline: "Special Offer", subtext: "Try it risk-free today.", buttonText: "Check Availability", discount: "[X]% OFF", guarantee: "30-Day Money-Back Guarantee", urgency: "Limited time offer — while supplies last", layout: "stacked" };
     case "comments":
-      return { type, id, comments: [{ name: "Customer Name", text: "Great product! Really made a difference.", likes: "43", timeAgo: "2 days ago" }] };
+      return { type, id, comments: [{ name: "Customer Name", text: "Great product! Really made a difference.", likes: "43", timeAgo: "2 days ago", isVerified: true }] };
     case "disclaimer":
       return { type, id, text: "THIS IS AN ADVERTISEMENT AND NOT AN ACTUAL NEWS ARTICLE, BLOG, OR CONSUMER PROTECTION UPDATE. MARKETING DISCLOSURE: This website is a marketplace. The owner has a monetary connection to the products and services advertised on the site." };
   }

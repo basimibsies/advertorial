@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json, redirect, useLoaderData, useNavigation, Form } from "@remix-run/react";
+import { json, redirect, useLoaderData, useActionData, useNavigation, Form } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -18,8 +18,10 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getPrimaryDomain } from "../lib/shopify.server";
+import { getPrimaryDomain, updateShopifyPage } from "../lib/shopify.server";
 import prisma from "../db.server";
+import { renderBlocksToHtml } from "../lib/block-renderer";
+import type { Block } from "../lib/blocks";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -55,6 +57,35 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
+
+  if (intent === "update-page") {
+    const { id } = params;
+    if (!id) return json({ error: "Missing ID" }, { status: 400 });
+    const advertorial = await prisma.advertorial.findFirst({
+      where: { id, shop: session.shop },
+    });
+    if (!advertorial) return json({ error: "Not found" }, { status: 404 });
+    if (!advertorial.shopifyPageId) {
+      return json({ error: "No published page to update" }, { status: 400 });
+    }
+    try {
+      const blocks = (advertorial.blocks ? JSON.parse(advertorial.blocks as string) : []) as Block[];
+      const primaryColor = "#22c55e";
+      const html =
+        blocks.length > 0
+          ? renderBlocksToHtml(blocks, {
+              primaryColor,
+              productTitle: advertorial.productTitle,
+              productHandle: advertorial.productHandle,
+            })
+          : advertorial.content;
+      await updateShopifyPage(admin, session.shop, advertorial.shopifyPageId, advertorial.title, html);
+      return json({ success: true, message: "Page updated on Shopify." });
+    } catch (e) {
+      console.error("Error updating Shopify page:", e);
+      return json({ error: "Failed to update page" }, { status: 500 });
+    }
+  }
 
   if (intent === "delete") {
     const { id } = params;
@@ -106,11 +137,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 export default function AdvertorialDetail() {
   const { advertorial } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const appBridge = useAppBridge();
   const [copied, setCopied] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const isUpdatingPage = navigation.state === "submitting" && navigation.formData?.get("intent") === "update-page";
 
   const isDeleting = navigation.state === "submitting" && navigation.formData?.get("intent") === "delete";
   const canDelete = deleteConfirmation.toLowerCase() === "delete";
@@ -130,17 +163,35 @@ export default function AdvertorialDetail() {
     <Page>
       <TitleBar title={advertorial.title}>
         {liveUrl && (
-          <Button
-            url={liveUrl}
-            target="_blank"
-            variant="primary"
-          >
-            View Live Page
-          </Button>
+          <InlineStack gap="200">
+            <Button
+              url={liveUrl}
+              target="_blank"
+              variant="primary"
+            >
+              View Live Page
+            </Button>
+            <Form method="post">
+              <input type="hidden" name="intent" value="update-page" />
+              <Button submit variant="secondary" loading={isUpdatingPage}>
+                Update page on Shopify
+              </Button>
+            </Form>
+          </InlineStack>
         )}
       </TitleBar>
       <Layout>
         <Layout.Section>
+          {actionData && "success" in actionData && actionData.success && (
+            <Banner tone="success" onDismiss={() => {}}>
+              Page updated on Shopify.
+            </Banner>
+          )}
+          {actionData && "error" in actionData && actionData.error && (
+            <Banner tone="critical" onDismiss={() => {}}>
+              {actionData.error}
+            </Banner>
+          )}
           <Card>
             <BlockStack gap="500">
               <BlockStack gap="300">

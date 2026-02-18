@@ -4,18 +4,24 @@
 // The actual logic lives in block-generator.ts and block-renderer.ts.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export type TemplateType = "Story" | "Listicle";
-export type AngleType = "Pain" | "Desire" | "Comparison";
-
 import type { Block } from "./blocks";
 import { generateBlocks, generateTitle } from "./block-generator";
 import { renderBlocksToHtml } from "./block-renderer";
+
+export type TemplateType = "Story" | "Listicle";
+export type AngleType = "Pain" | "Desire" | "Comparison";
+export type TemplateVariantType =
+  | "story-classic"
+  | "story-uvp-sidebar"
+  | "story-problem-solution"
+  | "listicle-comparison";
 
 interface GenerateContentParams {
   productTitle: string;
   productHandle: string;
   productDescription?: string;
   template: TemplateType;
+  templateVariant?: TemplateVariantType;
   angle: AngleType;
   primaryColor?: string;
   backgroundColor?: string;
@@ -32,6 +38,7 @@ export async function generateAdvertorialContent(
     productHandle,
     productDescription = "",
     template,
+    templateVariant,
     angle,
     primaryColor = "#000000",
   } = params;
@@ -42,11 +49,14 @@ export async function generateAdvertorialContent(
     productHandle,
     productDescription,
     template,
+    templateVariant,
     angle,
   });
 
   // 2. Generate the title
-  const title = generateTitle(productTitle, template, angle);
+  const title = templateVariant
+    ? `${productTitle} Advertorial`
+    : generateTitle(productTitle, template, angle);
 
   // 3. Render blocks to HTML
   const html = renderBlocksToHtml(blocks, {

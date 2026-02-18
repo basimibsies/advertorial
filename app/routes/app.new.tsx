@@ -12,11 +12,12 @@ import {
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getProducts, getBrandSettings, type Product, type BrandSettings } from "../lib/shopify.server";
-import { generateAdvertorialContent, renderBlocks, type TemplateType, type AngleType } from "../lib/templates.server";
+import { getProducts, getBrandSettings, type Product } from "../lib/shopify.server";
+import { renderBlocks } from "../lib/templates.server";
 import { createShopifyPage } from "../lib/shopify.server";
 import type { Block, BlockType } from "../lib/blocks";
 import { BLOCK_CATALOG, createEmptyBlock } from "../lib/blocks";
+import { generateFromPremadeTemplate, PREMADE_TEMPLATES, type AngleType } from "../lib/premade-templates";
 import prisma from "../db.server";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -26,33 +27,8 @@ const STEPS = [
   { id: "product", label: "Product" },
   { id: "angle", label: "Angle" },
   { id: "brand", label: "Brand" },
-  { id: "preview", label: "Preview" },
+  { id: "preview", label: "Edit & Publish" },
 ] as const;
-
-const TEMPLATES: {
-  id: TemplateType;
-  label: string;
-  description: string;
-  badge?: string;
-}[] = [
-  {
-    id: "Story",
-    label: "Story",
-    description: "Narrative-style page with a compelling story arc that hooks readers and guides them to your product.",
-    badge: "Most Popular",
-  },
-  {
-    id: "Listicle",
-    label: "Listicle",
-    description: "Numbered list format like '5 Reasons Why...' that's scannable and persuasive.",
-  },
-];
-
-const COMING_SOON_TEMPLATES = [
-  { label: "Interview", description: "Q&A format with an expert or customer." },
-  { label: "Before / After", description: "Transformation-focused with visual proof." },
-  { label: "Review Roundup", description: "Curated customer reviews as social proof." },
-];
 
 const ANGLES: {
   id: AngleType;
@@ -104,16 +80,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (step === "generate") {
     const productId = formData.get("productId") as string;
-    const template = formData.get("template") as TemplateType;
-    const angle = formData.get("angle") as AngleType;
-    const primaryColor = (formData.get("primaryColor") as string) || "#000000";
-    const backgroundColor = (formData.get("backgroundColor") as string) || "#ffffff";
-    const textColor = (formData.get("textColor") as string) || "#1a1a1a";
-    const headerFont = (formData.get("headerFont") as string) || "system-ui, sans-serif";
-    const bodyFont = (formData.get("bodyFont") as string) || "system-ui, sans-serif";
+    const angle = (formData.get("angle") as AngleType) || "Desire";
+    const primaryColor = (formData.get("primaryColor") as string) || "#22c55e";
+    const templateId = (formData.get("templateId") as string) || "editorial";
 
-    if (!productId || !template || !angle) {
-      return json({ error: "Please complete all steps", step: "generate" }, { status: 400 });
+    if (!productId) {
+      return json({ error: "Please select a product", step: "generate" }, { status: 400 });
     }
 
     const products = await getProducts(admin);
@@ -124,30 +96,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      const { title, html, blocks } = await generateAdvertorialContent({
+      const { title, blocks } = generateFromPremadeTemplate(templateId, {
         productTitle: product.title,
         productHandle: product.handle,
         productDescription: product.description,
-        template,
+        productImage: product.featuredImage || undefined,
         angle,
-        primaryColor,
-        backgroundColor,
-        textColor,
-        headerFont,
-        bodyFont,
       });
 
+      const html = renderBlocks(blocks, {
+        primaryColor,
+        productTitle: product.title,
+        productHandle: product.handle,
+      });
+
+      const templateName = PREMADE_TEMPLATES.find((t) => t.id === templateId)?.name || "Template";
       return json({
         step: "preview",
         productId,
         productTitle: product.title,
         productHandle: product.handle,
-        template,
-        angle,
         title,
         html,
         blocks,
         primaryColor,
+        angle,
+        templateId,
+        templateName,
       });
     } catch (error) {
       console.error("Generation error:", error);
@@ -162,18 +137,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const productId = formData.get("productId") as string;
     const productTitle = formData.get("productTitle") as string;
     const productHandle = formData.get("productHandle") as string;
-    const template = formData.get("template") as TemplateType;
-    const angle = formData.get("angle") as AngleType;
     const title = formData.get("title") as string;
     const blocksJson = formData.get("blocks") as string;
-    const primaryColor = (formData.get("primaryColor") as string) || "#000000";
+    const primaryColor = (formData.get("primaryColor") as string) || "#22c55e";
 
     if (!productId || !title || !blocksJson) {
       return json({ error: "Missing required fields", step: "publish" }, { status: 400 });
     }
 
     try {
-      // Re-render blocks to HTML at publish time (source of truth = blocks)
       const blocks = JSON.parse(blocksJson) as Block[];
       const html = renderBlocks(blocks, { primaryColor, productTitle, productHandle });
 
@@ -185,8 +157,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           productId,
           productTitle,
           productHandle,
-          template,
-          angle,
+          template: (formData.get("templateId") as string) || "Editorial",
+          angle: (formData.get("angle") as string) || "General",
           title,
           content: html,
           blocks: blocksJson,
@@ -216,7 +188,6 @@ const styles = {
     margin: "0 auto",
   } as React.CSSProperties,
 
-  // Progress bar
   progressBar: {
     display: "flex",
     alignItems: "center",
@@ -242,7 +213,7 @@ const styles = {
         : { backgroundColor: "#f1f1f1", color: "#8c9196", border: "2px solid #d2d5d8" }),
   }) as React.CSSProperties,
   stepLine: (completed: boolean) => ({
-    width: "60px",
+    width: "80px",
     height: "2px",
     backgroundColor: completed ? "#008060" : "#d2d5d8",
     transition: "background-color 0.2s ease",
@@ -261,39 +232,22 @@ const styles = {
     alignItems: "center",
   } as React.CSSProperties,
 
-  // Cards
-  cardGrid: (cols: number) => ({
+  cardGrid: {
     display: "grid",
-    gridTemplateColumns: `repeat(${cols}, 1fr)`,
+    gridTemplateColumns: "repeat(3, 1fr)",
     gap: "20px",
-  }) as React.CSSProperties,
-  card: (selected: boolean, disabled = false) => ({
+  } as React.CSSProperties,
+  card: (selected: boolean) => ({
     border: selected ? "2px solid #2C6ECB" : "2px solid #e1e3e5",
     borderRadius: "12px",
     padding: "24px",
-    cursor: disabled ? "default" : "pointer",
+    cursor: "pointer",
     transition: "all 0.15s ease",
-    backgroundColor: disabled ? "#fafafa" : selected ? "#f0f6ff" : "#fff",
-    opacity: disabled ? 0.6 : 1,
+    backgroundColor: selected ? "#f0f6ff" : "#fff",
     position: "relative" as const,
     ...(selected ? { boxShadow: "0 0 0 1px #2C6ECB" } : {}),
   }) as React.CSSProperties,
 
-  // Template thumbnails
-  thumbnail: (primaryColor: string) => ({
-    width: "100%",
-    height: "160px",
-    backgroundColor: "#f6f6f7",
-    borderRadius: "8px",
-    marginBottom: "16px",
-    overflow: "hidden",
-    padding: "16px",
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "6px",
-  }) as React.CSSProperties,
-
-  // Product cards
   productImage: {
     width: "100%",
     height: "120px",
@@ -315,7 +269,6 @@ const styles = {
     fontSize: "32px",
   } as React.CSSProperties,
 
-  // Navigation
   navBar: {
     display: "flex",
     justifyContent: "space-between",
@@ -323,68 +276,6 @@ const styles = {
     paddingTop: "32px",
     marginTop: "32px",
     borderTop: "1px solid #e1e3e5",
-  } as React.CSSProperties,
-
-  // Brand step
-  brandLayout: {
-    display: "grid",
-    gridTemplateColumns: "320px 1fr",
-    gap: "32px",
-    alignItems: "start",
-  } as React.CSSProperties,
-  colorRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    marginBottom: "16px",
-  } as React.CSSProperties,
-  colorSwatch: (color: string) => ({
-    width: "40px",
-    height: "40px",
-    borderRadius: "8px",
-    border: "2px solid #e1e3e5",
-    backgroundColor: color,
-    cursor: "pointer",
-    flexShrink: 0,
-  }) as React.CSSProperties,
-  miniPreview: {
-    border: "1px solid #e1e3e5",
-    borderRadius: "12px",
-    overflow: "hidden",
-    backgroundColor: "#fff",
-  } as React.CSSProperties,
-
-  // Preview
-  previewFrame: {
-    border: "1px solid #e1e3e5",
-    borderRadius: "12px",
-    overflow: "auto",
-    maxHeight: "600px",
-    backgroundColor: "#fff",
-  } as React.CSSProperties,
-
-  // Badges
-  badge: (color: string) => ({
-    position: "absolute" as const,
-    top: "-10px",
-    right: "12px",
-    backgroundColor: color,
-    color: "#fff",
-    padding: "2px 10px",
-    borderRadius: "10px",
-    fontSize: "11px",
-    fontWeight: 600,
-  }) as React.CSSProperties,
-  comingSoonBadge: {
-    position: "absolute" as const,
-    top: "12px",
-    right: "12px",
-    backgroundColor: "#e4e5e7",
-    color: "#6d7175",
-    padding: "2px 8px",
-    borderRadius: "6px",
-    fontSize: "11px",
-    fontWeight: 500,
   } as React.CSSProperties,
 
   heading: {
@@ -398,7 +289,7 @@ const styles = {
   } as React.CSSProperties,
 };
 
-// ─── Progress Bar Component ──────────────────────────────────────────────────
+// ─── Progress Bar ────────────────────────────────────────────────────────────
 
 function ProgressBar({ currentStep }: { currentStep: number }) {
   return (
@@ -422,89 +313,252 @@ function ProgressBar({ currentStep }: { currentStep: number }) {
   );
 }
 
+// ─── Template Preview Modal ─────────────────────────────────────────────────
+
+function TemplatePreviewModal({
+  templateId,
+  onClose,
+}: {
+  templateId: string;
+  onClose: () => void;
+}) {
+  const [html, setHtml] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [templates, renderer] = await Promise.all([
+        import("../lib/premade-templates"),
+        import("../lib/block-renderer"),
+      ]);
+      if (cancelled) return;
+      try {
+        const { blocks } = templates.generateFromPremadeTemplate(templateId, {
+          productTitle: "Your Product Name",
+          productHandle: "your-product",
+          productDescription: "This is a preview with sample content. Your actual product details will replace this text when you create your advertorial.",
+        });
+        const rendered = renderer.renderBlocksToHtml(blocks, {
+          primaryColor: "#22c55e",
+          productTitle: "Your Product Name",
+          productHandle: "your-product",
+        });
+        if (!cancelled) setHtml(rendered);
+      } catch (e) {
+        console.error("Preview generation error:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [templateId]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        backgroundColor: "rgba(0,0,0,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: "#fff",
+          borderRadius: "16px",
+          width: "100%",
+          maxWidth: "900px",
+          maxHeight: "90vh",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.25)",
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px 24px",
+          borderBottom: "1px solid #e1e3e5",
+          flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Text variant="headingMd" as="h2">
+              {PREMADE_TEMPLATES.find((t) => t.id === templateId)?.name || "Template"} Preview
+            </Text>
+            <Badge tone="info">Sample Data</Badge>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              width: "32px",
+              height: "32px",
+              border: "none",
+              borderRadius: "8px",
+              backgroundColor: "#f1f1f1",
+              cursor: "pointer",
+              fontSize: "16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#6d7175",
+            }}
+          >✕</button>
+        </div>
+
+        {/* Preview body */}
+        <div style={{
+          flex: 1,
+          overflowY: "auto",
+          backgroundColor: "#f6f6f7",
+          padding: "24px",
+        }}>
+          {html ? (
+            <div style={{
+              maxWidth: "800px",
+              margin: "0 auto",
+              backgroundColor: "#fff",
+              borderRadius: "8px",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+              overflow: "hidden",
+            }}>
+              <div
+                dangerouslySetInnerHTML={{ __html: html }}
+                style={{ pointerEvents: "none" }}
+              />
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "80px 20px", color: "#6d7175" }}>
+              <div style={{ fontSize: "24px", marginBottom: "12px" }}>Loading preview...</div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: "12px 24px",
+          borderTop: "1px solid #e1e3e5",
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: "8px",
+          flexShrink: 0,
+        }}>
+          <Button onClick={onClose}>Close</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Step 1: Template Selection ──────────────────────────────────────────────
 
 function TemplateStep({
   selected,
   onSelect,
 }: {
-  selected: TemplateType | "";
-  onSelect: (t: TemplateType) => void;
+  selected: string;
+  onSelect: (id: string) => void;
 }) {
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+
   return (
     <div>
       <div style={styles.heading}>
         <Text variant="headingLg" as="h2">Choose a template</Text>
       </div>
       <p style={styles.subtext}>
-        Pick a starting point. Each template is optimized for different storytelling styles.
+        Each template is a complete advertorial design. Pick one to get started — you can customize everything in the editor.
       </p>
 
-      <div style={styles.cardGrid(2)}>
-        {TEMPLATES.map((t) => (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "20px" }}>
+        {PREMADE_TEMPLATES.map((t) => (
           <div
             key={t.id}
-            style={styles.card(selected === t.id)}
+            style={{
+              ...styles.card(selected === t.id),
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
             onClick={() => onSelect(t.id)}
             role="button"
             tabIndex={0}
           >
-            {t.badge && <div style={styles.badge("#008060")}>{t.badge}</div>}
-
-            {/* Mini thumbnail preview */}
-            <div style={styles.thumbnail("#2C6ECB")}>
-              {t.id === "Story" ? (
-                <>
-                  <div style={{ height: "10px", width: "80%", backgroundColor: "#d4d5d7", borderRadius: "3px" }} />
-                  <div style={{ height: "10px", width: "60%", backgroundColor: "#d4d5d7", borderRadius: "3px" }} />
-                  <div style={{ height: "6px" }} />
-                  <div style={{ height: "8px", width: "100%", backgroundColor: "#e1e3e5", borderRadius: "2px" }} />
-                  <div style={{ height: "8px", width: "100%", backgroundColor: "#e1e3e5", borderRadius: "2px" }} />
-                  <div style={{ height: "8px", width: "70%", backgroundColor: "#e1e3e5", borderRadius: "2px" }} />
-                  <div style={{ height: "6px" }} />
-                  <div style={{ height: "40px", width: "100%", backgroundColor: "#ebeced", borderRadius: "6px" }} />
-                  <div style={{ height: "6px" }} />
-                  <div style={{ height: "24px", width: "50%", margin: "0 auto", backgroundColor: "#2C6ECB", borderRadius: "4px" }} />
-                </>
-              ) : (
-                <>
-                  <div style={{ height: "10px", width: "80%", backgroundColor: "#d4d5d7", borderRadius: "3px" }} />
-                  <div style={{ height: "6px" }} />
-                  {[1, 2, 3].map((n) => (
-                    <div key={n} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <div style={{ width: "18px", height: "18px", borderRadius: "50%", backgroundColor: "#2C6ECB", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "9px", fontWeight: 700 }}>{n}</div>
-                      <div style={{ flex: 1, height: "8px", backgroundColor: "#e1e3e5", borderRadius: "2px" }} />
-                    </div>
-                  ))}
-                  <div style={{ height: "6px" }} />
-                  <div style={{ height: "24px", width: "50%", margin: "0 auto", backgroundColor: "#2C6ECB", borderRadius: "4px" }} />
-                </>
-              )}
+            <div style={{
+              fontSize: "40px",
+              width: "64px",
+              height: "64px",
+              borderRadius: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: selected === t.id ? "#e0ecff" : "#f6f6f7",
+            }}>
+              {t.id === "editorial" ? "📰" : t.id === "personal-story" ? "📖" : "📄"}
             </div>
-
-            <Text variant="headingMd" as="h3">{t.label}</Text>
+            <div>
+              <Text variant="headingMd" as="h3">{t.name}</Text>
+              <div style={{ marginTop: "6px" }}>
+                <Text variant="bodySm" as="p" tone="subdued">{t.description}</Text>
+              </div>
+            </div>
             <div style={{ marginTop: "4px" }}>
-              <Text variant="bodySm" tone="subdued">{t.description}</Text>
+              <button
+                onClick={(e) => { e.stopPropagation(); setPreviewingId(t.id); }}
+                style={{
+                  background: "none",
+                  border: "1px solid #c9cccf",
+                  borderRadius: "6px",
+                  padding: "6px 14px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "#2C6ECB",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#f0f6ff"; (e.currentTarget as HTMLElement).style.borderColor = "#2C6ECB"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "#c9cccf"; }}
+              >Preview Template</button>
             </div>
+            {selected === t.id && (
+              <div style={{
+                position: "absolute",
+                top: "12px",
+                right: "12px",
+                width: "24px",
+                height: "24px",
+                borderRadius: "50%",
+                backgroundColor: "#2C6ECB",
+                color: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "14px",
+                fontWeight: 700,
+              }}>✓</div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Coming Soon */}
-      <div style={{ marginTop: "24px" }}>
-        <Text variant="headingSm" as="h3">Coming soon</Text>
-        <div style={{ ...styles.cardGrid(3), marginTop: "12px" }}>
-          {COMING_SOON_TEMPLATES.map((t) => (
-            <div key={t.label} style={styles.card(false, true)}>
-              <div style={styles.comingSoonBadge}>Soon</div>
-              <Text variant="headingSm" as="h4">{t.label}</Text>
-              <div style={{ marginTop: "4px" }}>
-                <Text variant="bodySm" tone="subdued">{t.description}</Text>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {previewingId && (
+        <TemplatePreviewModal
+          templateId={previewingId}
+          onClose={() => setPreviewingId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -526,10 +580,10 @@ function ProductStep({
         <Text variant="headingLg" as="h2">Select a product</Text>
       </div>
       <p style={styles.subtext}>
-        Choose the product you want to create an advertorial for.
+        Choose the product you want to create an advertorial for. We'll generate a beautiful template pre-filled with your product info.
       </p>
 
-      <div style={styles.cardGrid(3)}>
+      <div style={styles.cardGrid}>
         {products.map((p) => (
           <div
             key={p.id}
@@ -568,7 +622,7 @@ function ProductStep({
   );
 }
 
-// ─── Step 3: Angle Selection ─────────────────────────────────────────────────
+// ─── Step 2: Angle Selection ─────────────────────────────────────────────────
 
 function AngleStep({
   selected,
@@ -586,7 +640,7 @@ function AngleStep({
         The angle determines the psychological approach of your advertorial. Each one appeals to different motivations.
       </p>
 
-      <div style={styles.cardGrid(3)}>
+      <div style={styles.cardGrid}>
         {ANGLES.map((a) => (
           <div
             key={a.id}
@@ -612,209 +666,77 @@ function AngleStep({
   );
 }
 
-// ─── Step 4: Brand Customization ─────────────────────────────────────────────
+// ─── Step 3: Brand Customization ─────────────────────────────────────────────
 
 function BrandStep({
   primaryColor,
-  backgroundColor,
-  textColor,
   onPrimaryChange,
-  onBackgroundChange,
-  onTextChange,
-  autoDetected,
-  selectedTemplate,
-  selectedAngle,
 }: {
   primaryColor: string;
-  backgroundColor: string;
-  textColor: string;
   onPrimaryChange: (v: string) => void;
-  onBackgroundChange: (v: string) => void;
-  onTextChange: (v: string) => void;
-  autoDetected: boolean;
-  selectedTemplate: TemplateType;
-  selectedAngle: AngleType;
 }) {
   return (
     <div>
       <div style={styles.heading}>
-        <Text variant="headingLg" as="h2">Customize styling</Text>
+        <Text variant="headingLg" as="h2">Customize your brand</Text>
       </div>
       <p style={styles.subtext}>
-        Fine-tune the colors to match your brand. We've auto-detected your store's brand palette.
+        Set the primary accent color used for CTAs, highlights, and key elements.
       </p>
 
-      <div style={styles.brandLayout}>
-        {/* Settings */}
-        <div>
-          {autoDetected && (
-            <div style={{ marginBottom: "20px" }}>
-              <Banner tone="success" title="Brand colors detected">
-                <p>We pulled these from your store's brand settings. Feel free to adjust them.</p>
-              </Banner>
-            </div>
-          )}
-
-          <BlockStack gap="400">
+      <div style={{ maxWidth: "400px" }}>
+        <BlockStack gap="400">
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <input
+              type="color"
+              value={primaryColor}
+              onChange={(e) => onPrimaryChange(e.target.value)}
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "10px",
+                border: "2px solid #e1e3e5",
+                padding: 0,
+                cursor: "pointer",
+                backgroundColor: primaryColor,
+              }}
+            />
             <div>
-              <Text variant="headingSm" as="h4">Colors</Text>
-            </div>
-
-            <div style={styles.colorRow}>
-              <input
-                type="color"
-                value={primaryColor}
-                onChange={(e) => onPrimaryChange(e.target.value)}
-                style={{ ...styles.colorSwatch(primaryColor), padding: 0, border: "2px solid #e1e3e5" }}
-              />
-              <div>
-                <Text variant="bodyMd" fontWeight="medium">Primary / Accent</Text>
-                <Text variant="bodySm" tone="subdued">CTAs, highlights, and key elements</Text>
-              </div>
-            </div>
-
-            <div style={styles.colorRow}>
-              <input
-                type="color"
-                value={backgroundColor}
-                onChange={(e) => onBackgroundChange(e.target.value)}
-                style={{ ...styles.colorSwatch(backgroundColor), padding: 0, border: "2px solid #e1e3e5" }}
-              />
-              <div>
-                <Text variant="bodyMd" fontWeight="medium">Background</Text>
-                <Text variant="bodySm" tone="subdued">Page background color</Text>
-              </div>
-            </div>
-
-            <div style={styles.colorRow}>
-              <input
-                type="color"
-                value={textColor}
-                onChange={(e) => onTextChange(e.target.value)}
-                style={{ ...styles.colorSwatch(textColor), padding: 0, border: "2px solid #e1e3e5" }}
-              />
-              <div>
-                <Text variant="bodyMd" fontWeight="medium">Text</Text>
-                <Text variant="bodySm" tone="subdued">Headings and body copy</Text>
-              </div>
-            </div>
-          </BlockStack>
-        </div>
-
-        {/* Mini preview */}
-        <div style={styles.miniPreview}>
-          <div style={{ padding: "24px", backgroundColor, minHeight: "300px" }}>
-            <div style={{ maxWidth: "400px", margin: "0 auto" }}>
-              <div
-                style={{
-                  width: "60%",
-                  height: "14px",
-                  backgroundColor: textColor,
-                  borderRadius: "3px",
-                  marginBottom: "8px",
-                  opacity: 0.9,
-                }}
-              />
-              <div
-                style={{
-                  width: "40%",
-                  height: "10px",
-                  backgroundColor: textColor,
-                  borderRadius: "2px",
-                  marginBottom: "20px",
-                  opacity: 0.4,
-                }}
-              />
-              <div
-                style={{
-                  width: "100%",
-                  height: "8px",
-                  backgroundColor: textColor,
-                  borderRadius: "2px",
-                  marginBottom: "6px",
-                  opacity: 0.2,
-                }}
-              />
-              <div
-                style={{
-                  width: "100%",
-                  height: "8px",
-                  backgroundColor: textColor,
-                  borderRadius: "2px",
-                  marginBottom: "6px",
-                  opacity: 0.2,
-                }}
-              />
-              <div
-                style={{
-                  width: "70%",
-                  height: "8px",
-                  backgroundColor: textColor,
-                  borderRadius: "2px",
-                  marginBottom: "20px",
-                  opacity: 0.2,
-                }}
-              />
-
-              {selectedTemplate === "Listicle" ? (
-                [1, 2, 3].map((n) => (
-                  <div key={n} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                    <div
-                      style={{
-                        width: "24px",
-                        height: "24px",
-                        borderRadius: "50%",
-                        backgroundColor: primaryColor,
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {n}
-                    </div>
-                    <div style={{ flex: 1, height: "8px", backgroundColor: textColor, borderRadius: "2px", opacity: 0.15 }} />
-                  </div>
-                ))
-              ) : (
-                <div
-                  style={{
-                    backgroundColor: `${textColor}08`,
-                    borderRadius: "8px",
-                    padding: "16px",
-                    marginBottom: "20px",
-                  }}
-                >
-                  {[1, 2, 3].map((n) => (
-                    <div key={n} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: primaryColor, flexShrink: 0 }} />
-                      <div style={{ flex: 1, height: "6px", backgroundColor: textColor, borderRadius: "2px", opacity: 0.15 }} />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div
-                style={{
-                  backgroundColor: primaryColor,
-                  color: "#fff",
-                  padding: "10px 24px",
-                  borderRadius: "6px",
-                  textAlign: "center",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  width: "fit-content",
-                  margin: "0 auto",
-                }}
-              >
-                Shop Now
-              </div>
+              <Text variant="bodyMd" fontWeight="medium">Primary / Accent Color</Text>
+              <Text variant="bodySm" tone="subdued">Used for buttons, links, and highlights</Text>
             </div>
           </div>
-        </div>
+
+          {/* Preview swatch row */}
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+            {["#22c55e", "#2C6ECB", "#e03131", "#f59f00", "#7c3aed", "#000000"].map((c) => (
+              <div
+                key={c}
+                onClick={() => onPrimaryChange(c)}
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "8px",
+                  backgroundColor: c,
+                  cursor: "pointer",
+                  border: primaryColor === c ? "3px solid #212529" : "2px solid #e1e3e5",
+                  transition: "all 0.1s ease",
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Mini button preview */}
+          <div style={{ marginTop: "20px", padding: "20px", border: "1px solid #e1e3e5", borderRadius: "12px", backgroundColor: "#fafafa" }}>
+            <Text variant="bodySm" tone="subdued">Preview</Text>
+            <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-start" }}>
+              <div style={{ padding: "10px 24px", backgroundColor: primaryColor, color: "#fff", borderRadius: "8px", fontWeight: 700, fontSize: "14px" }}>
+                CHECK AVAILABILITY
+              </div>
+              <div style={{ fontSize: "13px", color: primaryColor, fontWeight: 600 }}>✔ 30-Day Money-Back Guarantee</div>
+            </div>
+          </div>
+        </BlockStack>
       </div>
     </div>
   );
@@ -827,15 +749,13 @@ function getBlockMeta(block: Block): { icon: string; label: string } {
   return { icon: entry?.icon || "📦", label: entry?.label || block.type };
 }
 
-// ─── Step 5: Visual Block Editor ─────────────────────────────────────────────
+// ─── Step 2: Block Editor ────────────────────────────────────────────────────
 
 function BlockEditorStep({
   title,
   blocks: initialBlocks,
   productTitle,
   productHandle,
-  template,
-  angle,
   primaryColor,
   isSubmitting,
   error,
@@ -845,8 +765,6 @@ function BlockEditorStep({
   blocks: Block[];
   productTitle: string;
   productHandle: string;
-  template: string;
-  angle: string;
   primaryColor: string;
   isSubmitting: boolean;
   error?: string;
@@ -859,7 +777,6 @@ function BlockEditorStep({
 
   const renderOpts = { primaryColor, productTitle, productHandle };
 
-  // Import renderSingleBlockToHtml dynamically to avoid SSR issues
   const [renderFn, setRenderFn] = useState<((b: Block, opts: any) => string) | null>(null);
   useEffect(() => {
     import("../lib/block-renderer").then((mod) => {
@@ -916,7 +833,6 @@ function BlockEditorStep({
     setSidebarTab("settings");
   };
 
-  // ─── Editor Layout ────────────────────────────────────────────────────
   return (
     <div>
       {error && (
@@ -932,21 +848,18 @@ function BlockEditorStep({
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <Text variant="headingMd" as="h2">{title}</Text>
-          <InlineStack gap="100">
-            <Badge tone="info">{template}</Badge>
-            <Badge>{angle}</Badge>
-          </InlineStack>
+          <Badge tone="info">{previewData?.templateName || "Template"}</Badge>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span style={{ fontSize: "13px", color: "#6d7175" }}>{blocks.length} blocks</span>
           <Form method="post" style={{ display: "inline" }}>
             <input type="hidden" name="step" value="publish" />
+            <input type="hidden" name="templateId" value={previewData?.templateName || "Editorial"} />
             <input type="hidden" name="productId" value={previewData?.productId} />
             <input type="hidden" name="productTitle" value={previewData?.productTitle} />
             <input type="hidden" name="productHandle" value={previewData?.productHandle} />
-            <input type="hidden" name="template" value={previewData?.template} />
-            <input type="hidden" name="angle" value={previewData?.angle} />
             <input type="hidden" name="title" value={previewData?.title} />
+            <input type="hidden" name="angle" value={previewData?.angle || "Desire"} />
             <input type="hidden" name="blocks" value={JSON.stringify(blocks)} />
             <input type="hidden" name="primaryColor" value={primaryColor} />
             <Button submit variant="primary" loading={isSubmitting}>
@@ -959,7 +872,7 @@ function BlockEditorStep({
       {/* Two-column editor */}
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "0", minHeight: "700px" }}>
 
-        {/* ─── LEFT SIDEBAR ─── */}
+        {/* LEFT SIDEBAR */}
         <div style={{
           borderRight: "1px solid #e1e3e5",
           backgroundColor: "#fafbfc",
@@ -968,7 +881,6 @@ function BlockEditorStep({
           display: "flex",
           flexDirection: "column",
         }}>
-          {/* Sidebar tabs */}
           <div style={{ display: "flex", borderBottom: "1px solid #e1e3e5" }}>
             <button
               onClick={() => setSidebarTab("blocks")}
@@ -993,7 +905,6 @@ function BlockEditorStep({
           </div>
 
           <div style={{ padding: "12px", overflowY: "auto", flex: 1 }}>
-            {/* Block palette */}
             {sidebarTab === "blocks" && (
               <div>
                 <div style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", color: "#6d7175", marginBottom: "8px" }}>
@@ -1025,7 +936,6 @@ function BlockEditorStep({
               </div>
             )}
 
-            {/* Block settings */}
             {sidebarTab === "settings" && selectedBlock && (
               <BlockSettings
                 block={selectedBlock}
@@ -1048,7 +958,7 @@ function BlockEditorStep({
           </div>
         </div>
 
-        {/* ─── CENTER CANVAS ─── */}
+        {/* CENTER CANVAS */}
         <div style={{
           backgroundColor: "#f1f2f4",
           borderRadius: "0 12px 12px 0",
@@ -1064,14 +974,8 @@ function BlockEditorStep({
             boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
             overflow: "hidden",
           }}>
-            {/* Page title preview */}
-            <div style={{ padding: "24px 32px 0", borderBottom: "1px solid #f1f3f5" }}>
-              <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", color: "#868e96", marginBottom: "4px" }}>Page Title</div>
-              <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0 0 16px 0", color: "#212529" }}>{title}</h1>
-            </div>
-
             {/* Rendered blocks */}
-            <div style={{ padding: "0 32px" }}>
+            <div style={{ padding: "24px 32px" }}>
               {blocks.map((block, index) => {
                 const { icon, label } = getBlockMeta(block);
                 const isSelected = selectedBlockId === block.id;
@@ -1080,7 +984,6 @@ function BlockEditorStep({
 
                 return (
                   <div key={block.id}>
-                    {/* Insert indicator */}
                     <div
                       onClick={(e) => { e.stopPropagation(); addBlock("text", index - 1); }}
                       style={{
@@ -1096,7 +999,6 @@ function BlockEditorStep({
                       title="Click to insert block here"
                     />
 
-                    {/* Block wrapper */}
                     <div
                       onClick={() => selectBlock(block.id)}
                       onMouseEnter={() => setHoveredBlockId(block.id)}
@@ -1115,7 +1017,6 @@ function BlockEditorStep({
                         transition: "outline 0.1s ease",
                       }}
                     >
-                      {/* Block type label (shows on hover/select) */}
                       {(isSelected || isHovered) && (
                         <div style={{
                           position: "absolute",
@@ -1138,7 +1039,6 @@ function BlockEditorStep({
                         </div>
                       )}
 
-                      {/* Quick actions (show on select) */}
                       {isSelected && (
                         <div style={{
                           position: "absolute",
@@ -1174,7 +1074,6 @@ function BlockEditorStep({
                         </div>
                       )}
 
-                      {/* Rendered block content */}
                       <div
                         dangerouslySetInnerHTML={{ __html: blockHtml }}
                         style={{ pointerEvents: "none" }}
@@ -1184,7 +1083,6 @@ function BlockEditorStep({
                 );
               })}
 
-              {/* Add block at end */}
               <div
                 onClick={() => addBlock("text")}
                 style={{
@@ -1245,13 +1143,11 @@ function BlockSettings({
 
   return (
     <div>
-      {/* Block header */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
         <span style={{ fontSize: "20px" }}>{icon}</span>
         <span style={{ fontWeight: 700, fontSize: "14px" }}>{label}</span>
       </div>
 
-      {/* Actions */}
       <div style={{ display: "flex", gap: "4px", marginBottom: "16px", flexWrap: "wrap" }}>
         <button onClick={onMoveUp} disabled={isFirst} style={{ ...inputStyle, width: "auto", padding: "6px 10px", cursor: isFirst ? "default" : "pointer", opacity: isFirst ? 0.4 : 1 }}>↑ Up</button>
         <button onClick={onMoveDown} disabled={isLast} style={{ ...inputStyle, width: "auto", padding: "6px 10px", cursor: isLast ? "default" : "pointer", opacity: isLast ? 0.4 : 1 }}>↓ Down</button>
@@ -1260,7 +1156,6 @@ function BlockSettings({
       </div>
 
       <div style={{ borderTop: "1px solid #e9ecef", paddingTop: "12px" }}>
-        {/* Type-specific fields */}
         {block.type === "headline" && (
           <>
             <div style={fieldStyle}>
@@ -1268,21 +1163,44 @@ function BlockSettings({
               <textarea rows={2} value={block.text} onChange={(e) => onChange({ text: e.target.value })} style={inputStyle} />
             </div>
             <div style={fieldStyle}>
-              <label style={labelStyle}>Size</label>
-              <select value={block.size} onChange={(e) => onChange({ size: e.target.value as "large" | "medium" | "small" })} style={inputStyle}>
-                <option value="large">Large</option>
-                <option value="medium">Medium</option>
-                <option value="small">Small</option>
-              </select>
+              <label style={labelStyle}>Subheadline (optional)</label>
+              <input value={block.subheadline || ""} onChange={(e) => onChange({ subheadline: e.target.value || undefined })} style={inputStyle} placeholder="Supporting text below headline" />
+            </div>
+            <div style={{ display: "flex", gap: "6px", ...fieldStyle }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Size</label>
+                <select value={block.size} onChange={(e) => onChange({ size: e.target.value as "large" | "medium" | "small" })} style={inputStyle}>
+                  <option value="large">Large</option>
+                  <option value="medium">Medium</option>
+                  <option value="small">Small</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Alignment</label>
+                <select value={block.align || "left"} onChange={(e) => onChange({ align: e.target.value as "left" | "center" })} style={inputStyle}>
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                </select>
+              </div>
             </div>
           </>
         )}
 
         {block.type === "text" && (
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Content (HTML supported)</label>
-            <textarea rows={6} value={block.content} onChange={(e) => onChange({ content: e.target.value })} style={inputStyle} />
-          </div>
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Content (HTML supported)</label>
+              <textarea rows={6} value={block.content} onChange={(e) => onChange({ content: e.target.value })} style={inputStyle} />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Variant</label>
+              <select value={block.variant || "default"} onChange={(e) => onChange({ variant: e.target.value as "default" | "large-intro" | "pull-quote" })} style={inputStyle}>
+                <option value="default">Default</option>
+                <option value="large-intro">Large Intro</option>
+                <option value="pull-quote">Pull Quote</option>
+              </select>
+            </div>
+          </>
         )}
 
         {block.type === "image" && (
@@ -1298,6 +1216,10 @@ function BlockSettings({
             <div style={fieldStyle}>
               <label style={labelStyle}>Image URL (optional)</label>
               <input value={block.src || ""} onChange={(e) => onChange({ src: e.target.value || undefined })} style={inputStyle} placeholder="https://..." />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Caption (optional)</label>
+              <input value={block.caption || ""} onChange={(e) => onChange({ caption: e.target.value || undefined })} style={inputStyle} placeholder="Photo credit or description" />
             </div>
           </>
         )}
@@ -1318,12 +1240,20 @@ function BlockSettings({
                   <label style={labelStyle}>Subtext</label>
                   <input value={block.subtext} onChange={(e) => onChange({ subtext: e.target.value })} style={inputStyle} />
                 </div>
+                <div style={fieldStyle}>
+                  <label style={labelStyle}>Variant</label>
+                  <select value={block.variant || "gradient"} onChange={(e) => onChange({ variant: e.target.value as "gradient" | "solid" | "outline" })} style={inputStyle}>
+                    <option value="gradient">Gradient</option>
+                    <option value="solid">Solid</option>
+                    <option value="outline">Outline</option>
+                  </select>
+                </div>
               </>
             )}
             <div style={fieldStyle}>
               <label style={labelStyle}>Style</label>
               <select value={block.style} onChange={(e) => onChange({ style: e.target.value as "primary" | "inline" })} style={inputStyle}>
-                <option value="primary">Primary (large gradient)</option>
+                <option value="primary">Primary (large section)</option>
                 <option value="inline">Inline (simple button)</option>
               </select>
             </div>
@@ -1386,10 +1316,32 @@ function BlockSettings({
         )}
 
         {block.type === "guarantee" && (
-          <div style={fieldStyle}>
-            <label style={labelStyle}>Text</label>
-            <input value={block.text} onChange={(e) => onChange({ text: e.target.value })} style={inputStyle} />
-          </div>
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Text (fallback if no badges)</label>
+              <input value={block.text} onChange={(e) => onChange({ text: e.target.value })} style={inputStyle} />
+            </div>
+            {(block.badges || []).map((badge, i) => (
+              <div key={i} style={{ ...fieldStyle, display: "flex", gap: "6px" }}>
+                <div style={{ width: "60px" }}>
+                  <label style={labelStyle}>Icon</label>
+                  <input value={badge.icon} onChange={(e) => {
+                    const updated = [...(block.badges || [])];
+                    updated[i] = { ...updated[i], icon: e.target.value };
+                    onChange({ badges: updated });
+                  }} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Label</label>
+                  <input value={badge.label} onChange={(e) => {
+                    const updated = [...(block.badges || [])];
+                    updated[i] = { ...updated[i], label: e.target.value };
+                    onChange({ badges: updated });
+                  }} style={inputStyle} />
+                </div>
+              </div>
+            ))}
+          </>
         )}
 
         {block.type === "stats" && (
@@ -1397,6 +1349,13 @@ function BlockSettings({
             <div style={fieldStyle}>
               <label style={labelStyle}>Heading (optional)</label>
               <input value={block.heading || ""} onChange={(e) => onChange({ heading: e.target.value || undefined })} style={inputStyle} />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Layout</label>
+              <select value={block.layout || "grid"} onChange={(e) => onChange({ layout: e.target.value as "grid" | "horizontal" })} style={inputStyle}>
+                <option value="grid">Grid (cards)</option>
+                <option value="horizontal">Horizontal (inline)</option>
+              </select>
             </div>
             {block.stats.map((stat, i) => (
               <div key={i} style={{ ...fieldStyle, display: "flex", gap: "6px" }}>
@@ -1426,6 +1385,22 @@ function BlockSettings({
             <div style={fieldStyle}>
               <label style={labelStyle}>Heading (optional)</label>
               <input value={block.heading || ""} onChange={(e) => onChange({ heading: e.target.value || undefined })} style={inputStyle} />
+            </div>
+            <div style={{ display: "flex", gap: "6px", ...fieldStyle }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Layout</label>
+                <select value={block.layout || "grid"} onChange={(e) => onChange({ layout: e.target.value as "grid" | "stacked" })} style={inputStyle}>
+                  <option value="grid">Grid (columns)</option>
+                  <option value="stacked">Stacked (full width)</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Stars</label>
+                <select value={block.showStars !== false ? "yes" : "no"} onChange={(e) => onChange({ showStars: e.target.value === "yes" })} style={inputStyle}>
+                  <option value="yes">Show stars</option>
+                  <option value="no">Hide stars</option>
+                </select>
+              </div>
             </div>
             {block.testimonials.map((t, i) => (
               <div key={i} style={{ padding: "8px", border: "1px solid #e9ecef", borderRadius: "6px", marginBottom: "8px" }}>
@@ -1517,12 +1492,16 @@ function BlockSettings({
               <input value={block.date} onChange={(e) => onChange({ date: e.target.value })} style={inputStyle} />
             </div>
             <div style={fieldStyle}>
-              <label style={labelStyle}>Category</label>
-              <input value={block.category || ""} onChange={(e) => onChange({ category: e.target.value || undefined })} style={inputStyle} />
-            </div>
-            <div style={fieldStyle}>
               <label style={labelStyle}>Publication Name</label>
               <input value={block.publicationName || ""} onChange={(e) => onChange({ publicationName: e.target.value || undefined })} style={inputStyle} />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>View Count (optional)</label>
+              <input value={block.viewCount || ""} onChange={(e) => onChange({ viewCount: e.target.value || undefined })} style={inputStyle} placeholder="e.g. 290,153 views" />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Live Viewers (optional)</label>
+              <input value={block.liveViewers || ""} onChange={(e) => onChange({ liveViewers: e.target.value || undefined })} style={inputStyle} placeholder="e.g. 693" />
             </div>
           </>
         )}
@@ -1569,6 +1548,13 @@ function BlockSettings({
             <div style={fieldStyle}>
               <label style={labelStyle}>Urgency text</label>
               <input value={block.urgency || ""} onChange={(e) => onChange({ urgency: e.target.value || undefined })} style={inputStyle} />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Layout</label>
+              <select value={block.layout || "stacked"} onChange={(e) => onChange({ layout: e.target.value as "stacked" | "horizontal" })} style={inputStyle}>
+                <option value="stacked">Stacked (centered)</option>
+                <option value="horizontal">Horizontal (side by side)</option>
+              </select>
             </div>
           </>
         )}
@@ -1619,6 +1605,93 @@ function BlockSettings({
             <textarea rows={6} value={block.text} onChange={(e) => onChange({ text: e.target.value })} style={inputStyle} />
           </div>
         )}
+
+        {block.type === "comparison" && (
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Heading (optional)</label>
+              <input value={block.heading || ""} onChange={(e) => onChange({ heading: e.target.value || undefined })} style={inputStyle} />
+            </div>
+            {block.rows.map((row, i) => (
+              <div key={i} style={{ display: "flex", gap: "4px", ...fieldStyle }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Feature</label>
+                  <input value={row.feature} onChange={(e) => {
+                    const updated = [...block.rows];
+                    updated[i] = { ...updated[i], feature: e.target.value };
+                    onChange({ rows: updated });
+                  }} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Ours</label>
+                  <input value={row.ours} onChange={(e) => {
+                    const updated = [...block.rows];
+                    updated[i] = { ...updated[i], ours: e.target.value };
+                    onChange({ rows: updated });
+                  }} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Theirs</label>
+                  <input value={row.theirs} onChange={(e) => {
+                    const updated = [...block.rows];
+                    updated[i] = { ...updated[i], theirs: e.target.value };
+                    onChange({ rows: updated });
+                  }} style={inputStyle} />
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        {block.type === "prosCons" && (
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Pros (one per line)</label>
+              <textarea rows={4} value={block.pros.join("\n")} onChange={(e) => onChange({ pros: e.target.value.split("\n").filter(Boolean) })} style={inputStyle} />
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Cons (one per line)</label>
+              <textarea rows={3} value={block.cons.join("\n")} onChange={(e) => onChange({ cons: e.target.value.split("\n").filter(Boolean) })} style={inputStyle} />
+            </div>
+          </>
+        )}
+
+        {block.type === "timeline" && (
+          <>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Heading (optional)</label>
+              <input value={block.heading || ""} onChange={(e) => onChange({ heading: e.target.value || undefined })} style={inputStyle} />
+            </div>
+            {block.steps.map((step, i) => (
+              <div key={i} style={{ padding: "8px", border: "1px solid #e9ecef", borderRadius: "6px", marginBottom: "8px" }}>
+                <div style={fieldStyle}>
+                  <label style={labelStyle}>Label</label>
+                  <input value={step.label} onChange={(e) => {
+                    const updated = [...block.steps];
+                    updated[i] = { ...updated[i], label: e.target.value };
+                    onChange({ steps: updated });
+                  }} style={inputStyle} />
+                </div>
+                <div style={fieldStyle}>
+                  <label style={labelStyle}>Headline</label>
+                  <input value={step.headline} onChange={(e) => {
+                    const updated = [...block.steps];
+                    updated[i] = { ...updated[i], headline: e.target.value };
+                    onChange({ steps: updated });
+                  }} style={inputStyle} />
+                </div>
+                <div style={fieldStyle}>
+                  <label style={labelStyle}>Body</label>
+                  <input value={step.body} onChange={(e) => {
+                    const updated = [...block.steps];
+                    updated[i] = { ...updated[i], body: e.target.value };
+                    onChange({ steps: updated });
+                  }} style={inputStyle} />
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
@@ -1627,75 +1700,62 @@ function BlockSettings({
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function NewAdvertorial() {
-  const { products, brandSettings, shop } = useLoaderData<typeof loader>();
+  const { products, brandSettings } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  // Wizard state
   const [currentStep, setCurrentStep] = useState(0);
-  const [template, setTemplate] = useState<TemplateType | "">("");
+  const [templateId, setTemplateId] = useState("");
   const [productId, setProductId] = useState("");
   const [angle, setAngle] = useState<AngleType | "">("");
-  const [primaryColor, setPrimaryColor] = useState(brandSettings.primaryColor);
-  const [backgroundColor, setBackgroundColor] = useState(brandSettings.backgroundColor);
-  const [textColor, setTextColor] = useState(brandSettings.textColor);
+  const [primaryColor, setPrimaryColor] = useState(brandSettings.primaryColor === "#000000" ? "#22c55e" : brandSettings.primaryColor);
   const [showingPreview, setShowingPreview] = useState(false);
 
-  // Store preview data separately so it survives a failed publish attempt
   const [previewData, setPreviewData] = useState<{
     productId: string;
     productTitle: string;
     productHandle: string;
-    template: string;
-    angle: string;
     title: string;
     html: string;
     blocks: Block[];
     primaryColor: string;
+    angle: string;
+    templateName: string;
   } | null>(null);
 
-  // Track if brand settings are auto-detected (not all defaults)
-  const autoDetected =
-    brandSettings.primaryColor !== "#000000" ||
-    brandSettings.backgroundColor !== "#ffffff";
-
-  // When generate action returns preview, store data and advance to preview step
   useEffect(() => {
     if (actionData?.step === "preview" && actionData.html && actionData.blocks) {
       setPreviewData({
         productId: actionData.productId,
         productTitle: actionData.productTitle,
         productHandle: actionData.productHandle,
-        template: actionData.template,
-        angle: actionData.angle,
         title: actionData.title,
         html: actionData.html,
         blocks: actionData.blocks,
-        primaryColor: actionData.primaryColor || "#000000",
+        primaryColor: actionData.primaryColor || "#22c55e",
+        angle: actionData.angle || "Desire",
+        templateName: actionData.templateName || "Template",
       });
       setShowingPreview(true);
       setCurrentStep(4);
     }
   }, [actionData]);
 
-  const selectedProduct = products.find((p) => p.id === productId);
-
-  const canContinue = useCallback(() => {
+  const canContinue = () => {
     switch (currentStep) {
-      case 0: return !!template;
+      case 0: return !!templateId;
       case 1: return !!productId;
       case 2: return !!angle;
       case 3: return true;
       default: return false;
     }
-  }, [currentStep, template, productId, angle]);
+  };
 
   const handleContinue = () => {
     if (currentStep < 3) {
       setCurrentStep((s) => s + 1);
     }
-    // Step 3 -> 4 is handled by form submission (generate)
   };
 
   const handleBack = () => {
@@ -1707,9 +1767,7 @@ export default function NewAdvertorial() {
     }
   };
 
-  // Show block editor step — use stored previewData so it survives failed publish attempts
   if (showingPreview && previewData) {
-    // Show publish error if the last action was a failed publish
     const publishError = actionData?.step === "publish" && actionData?.error ? actionData.error : undefined;
 
     return (
@@ -1723,8 +1781,6 @@ export default function NewAdvertorial() {
             blocks={previewData.blocks}
             productTitle={previewData.productTitle}
             productHandle={previewData.productHandle}
-            template={previewData.template}
-            angle={previewData.angle}
             primaryColor={previewData.primaryColor}
             isSubmitting={isSubmitting}
             error={publishError}
@@ -1755,8 +1811,8 @@ export default function NewAdvertorial() {
         {/* Step 1: Template */}
         {currentStep === 0 && (
           <TemplateStep
-            selected={template}
-            onSelect={(t) => setTemplate(t)}
+            selected={templateId}
+            onSelect={(id) => setTemplateId(id)}
           />
         )}
 
@@ -1781,18 +1837,10 @@ export default function NewAdvertorial() {
         {currentStep === 3 && (
           <BrandStep
             primaryColor={primaryColor}
-            backgroundColor={backgroundColor}
-            textColor={textColor}
             onPrimaryChange={setPrimaryColor}
-            onBackgroundChange={setBackgroundColor}
-            onTextChange={setTextColor}
-            autoDetected={autoDetected}
-            selectedTemplate={template as TemplateType}
-            selectedAngle={angle as AngleType}
           />
         )}
 
-        {/* Navigation */}
         <div style={styles.navBar}>
           <div>
             {currentStep > 0 ? (
@@ -1801,7 +1849,6 @@ export default function NewAdvertorial() {
               <Button url="/app" variant="plain">Cancel</Button>
             )}
           </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <Text variant="bodySm" tone="subdued">
               Step {currentStep + 1} of {STEPS.length}
@@ -1818,21 +1865,17 @@ export default function NewAdvertorial() {
             ) : (
               <Form method="post">
                 <input type="hidden" name="step" value="generate" />
+                <input type="hidden" name="templateId" value={templateId} />
                 <input type="hidden" name="productId" value={productId} />
-                <input type="hidden" name="template" value={template} />
                 <input type="hidden" name="angle" value={angle} />
                 <input type="hidden" name="primaryColor" value={primaryColor} />
-                <input type="hidden" name="backgroundColor" value={backgroundColor} />
-                <input type="hidden" name="textColor" value={textColor} />
-                <input type="hidden" name="headerFont" value={brandSettings.headerFont} />
-                <input type="hidden" name="bodyFont" value={brandSettings.bodyFont} />
                 <Button
                   submit
                   variant="primary"
                   loading={isSubmitting}
-                  disabled={!template || !productId || !angle}
+                  disabled={!productId || !angle || !templateId}
                 >
-                  Generate Preview
+                  Create Advertorial
                 </Button>
               </Form>
             )}

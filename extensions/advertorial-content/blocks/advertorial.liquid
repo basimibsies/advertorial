@@ -9,6 +9,23 @@
   <div class="advertorial-content" {{ block.shopify_attributes }}>
     {{ page.metafields.advertorial.content }}
   </div>
+  <script>
+    (function() {
+      var el = document.querySelector('.advertorial-content');
+      if (!el) return;
+      function hideIfHasH1(node) {
+        if (node && node.querySelector && node.querySelector('h1')) {
+          node.style.display = 'none';
+          return true;
+        }
+        return false;
+      }
+      if (hideIfHasH1(el.previousElementSibling)) return;
+      if (el.parentElement && hideIfHasH1(el.parentElement.previousElementSibling)) return;
+      var section = el.closest('section') || el.closest('[data-section-id]');
+      if (section && hideIfHasH1(section.previousElementSibling)) return;
+    })();
+  </script>
 {% else %}
   <div class="advertorial-content advertorial-content--empty" {{ block.shopify_attributes }}>
     <div style="max-width: 800px; margin: 0 auto; padding: 60px 20px; text-align: center;">

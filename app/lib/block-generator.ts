@@ -7,13 +7,14 @@
 
 import type { Block } from "./blocks";
 import { generateBlockId } from "./blocks";
-import type { TemplateType, AngleType } from "./templates.server";
+import type { TemplateType, AngleType, TemplateVariantType } from "./templates.server";
 
 interface GenerateBlocksParams {
   productTitle: string;
   productHandle: string;
   productDescription?: string;
   template: TemplateType;
+  templateVariant?: TemplateVariantType;
   angle: AngleType;
 }
 
@@ -412,8 +413,263 @@ function generateListicleBlocks(
 
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
+function generateBasicStoryVariantBlocks(
+  productTitle: string,
+  productDescription: string,
+  angle: AngleType,
+  variant: Exclude<TemplateVariantType, "listicle-comparison">,
+): Block[] {
+  const pt = esc(productTitle);
+  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  const introByAngle = {
+    Pain: `Many shoppers dealing with the same issue say they felt stuck: they tried popular options, spent money, and still didn't get consistent results. This guide breaks down why that happens and how <strong>${pt}</strong> is designed to solve that exact gap.`,
+    Desire: `People looking to upgrade their daily routine are increasingly choosing <strong>${pt}</strong> for one simple reason: it combines practical performance with an experience that feels premium. Here's a clear breakdown of what makes it stand out.`,
+    Comparison: `With so many lookalike options on the market, it is hard to see which one is actually better. We reviewed what matters most in this category and compared common alternatives with <strong>${pt}</strong> in a straightforward way.`,
+  };
+
+  const headingTwoByAngle = {
+    Pain: "[Heading 2] Why most alternatives fail to solve the real problem",
+    Desire: "[Heading 2] What makes this option feel like a real upgrade",
+    Comparison: "[Heading 2] Side-by-side: where the differences actually matter",
+  };
+
+  const headingThreeByAngle = {
+    Pain: "[Heading 3] What to expect after consistent use",
+    Desire: "[Heading 3] Results customers report after making the switch",
+    Comparison: "[Heading 3] Is it worth it for long-term value?",
+  };
+
+  const blocks: Block[] = [
+    {
+      type: "headline",
+      id: generateBlockId(),
+      text: "[Heading 1] Describe the needs of users who are interested in the product.",
+      size: "large",
+    },
+    {
+      type: "authorByline",
+      id: generateBlockId(),
+      author: "Dr. Marcus",
+      role: "Contributor",
+      date,
+      publicationName: "Gemadvertorial",
+    },
+    {
+      type: "featureList",
+      id: generateBlockId(),
+      heading: "Unique Value Proposition",
+      items: [
+        "Product benefit 1",
+        "Product benefit 2",
+        "Product benefit 3",
+        "Product benefit 4",
+      ],
+      icon: "✓",
+    },
+    {
+      type: "offerBox",
+      id: generateBlockId(),
+      headline: "Official Offer",
+      subtext: "Check current pricing, availability, and guarantee terms.",
+      buttonText: "CHECK AVAILABILITY",
+      guarantee: "30-Day Money-Back Guarantee",
+    },
+    {
+      type: "image",
+      id: generateBlockId(),
+      label: "Insert product image",
+      hint: "Product shot for sidebar — clean product photography",
+      height: "180px",
+      placement: "sidebar",
+    },
+    {
+      type: "image",
+      id: generateBlockId(),
+      label: "Insert primary lifestyle image",
+      hint: "Use a contextual image that reflects the reader's problem or desired outcome",
+      height: "380px",
+    },
+    {
+      type: "text",
+      id: generateBlockId(),
+      content: `${introByAngle[angle]} ${productDescription ? `<br><br>${esc(productDescription)}` : ""}`,
+    },
+    {
+      type: "headline",
+      id: generateBlockId(),
+      text: headingTwoByAngle[angle],
+      size: "medium",
+    },
+    {
+      type: "text",
+      id: generateBlockId(),
+      content: `Use this section to explain the key mechanism behind <strong>${pt}</strong>. Keep the copy simple, specific, and benefit-led. Include concrete points the reader can verify, such as materials, usage process, or expected timeline.`,
+    },
+    {
+      type: "headline",
+      id: generateBlockId(),
+      text: headingThreeByAngle[angle],
+      size: "medium",
+    },
+    {
+      type: "text",
+      id: generateBlockId(),
+      content: `Close with realistic expectations and a direct next step. Reinforce risk-reversal with the guarantee and remind readers to purchase only from the official source to secure the latest pricing and support.`,
+    },
+    {
+      type: "faq",
+      id: generateBlockId(),
+      heading: "Frequently Asked Questions",
+      items: [
+        { question: `How does ${pt} work?`, answer: `${pt} is designed to address the core problem in this category through a repeatable daily use approach.` },
+        { question: "How long until users typically notice results?", answer: "Many users report early changes in the first 1-2 weeks, with stronger outcomes over consistent use." },
+        { question: "Is there a money-back guarantee?", answer: "Yes. Orders are covered by a 30-day money-back guarantee when purchased from official channels." },
+      ],
+    },
+    {
+      type: "disclaimer",
+      id: generateBlockId(),
+      text: "THIS IS AN ADVERTISEMENT AND NOT AN ACTUAL NEWS ARTICLE, BLOG, OR CONSUMER PROTECTION UPDATE. MARKETING DISCLOSURE: This website is a marketplace. The owner has a monetary connection to the products and services advertised on this site.",
+    },
+  ];
+
+  if (variant === "story-problem-solution") {
+    blocks.splice(6, 0, {
+      type: "note",
+      id: generateBlockId(),
+      style: "highlight",
+      text: `Problem: readers need a dependable solution they can stick with. Solution: ${pt} focuses on practical daily use and measurable benefits rather than hype.`,
+    });
+  }
+
+  return blocks;
+}
+
+function generateBasicListicleComparisonBlocks(
+  productTitle: string,
+  productDescription: string,
+): Block[] {
+  const pt = esc(productTitle);
+  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  return [
+    {
+      type: "headline",
+      id: generateBlockId(),
+      text: `5 Reasons People Choose ${pt} Over Alternatives`,
+      size: "large",
+    },
+    {
+      type: "authorByline",
+      id: generateBlockId(),
+      author: "Editorial Team",
+      role: "Product Research",
+      date,
+      publicationName: "Gemadvertorial",
+    },
+    {
+      type: "featureList",
+      id: generateBlockId(),
+      heading: "Unique Value Proposition",
+      items: ["Reason 1 summary", "Reason 2 summary", "Reason 3 summary", "Reason 4 summary"],
+      icon: "✓",
+    },
+    {
+      type: "offerBox",
+      id: generateBlockId(),
+      headline: "Official Offer",
+      subtext: "Check current pricing, availability, and guarantee terms.",
+      buttonText: "CHECK AVAILABILITY",
+      guarantee: "30-Day Money-Back Guarantee",
+    },
+    {
+      type: "image",
+      id: generateBlockId(),
+      label: "Insert product image",
+      hint: "Product shot for sidebar",
+      height: "180px",
+      placement: "sidebar",
+    },
+    {
+      type: "image",
+      id: generateBlockId(),
+      label: "Insert hero image",
+      hint: "Primary lifestyle or product hero — sets the tone for the page",
+      height: "340px",
+    },
+    {
+      type: "text",
+      id: generateBlockId(),
+      content: `${productDescription ? esc(productDescription) + "<br><br>" : ""}This breakdown focuses on practical factors: quality, performance, long-term value, and customer trust signals.`,
+    },
+    {
+      type: "numberedSection",
+      id: generateBlockId(),
+      number: "01",
+      label: "QUALITY",
+      headline: "Higher build quality and consistency",
+      body: `${pt} is designed for repeatable results with fewer compromises in materials and finish.`,
+      imageLabel: "Insert quality comparison visual",
+      imageHint: "Side-by-side close-up or materials comparison",
+    },
+    {
+      type: "numberedSection",
+      id: generateBlockId(),
+      number: "02",
+      label: "EFFECTIVENESS",
+      headline: "Performance users can feel quickly",
+      body: "Most buyers prioritize practical outcomes. This section should show realistic timelines and outcomes.",
+      imageLabel: "Insert results-focused visual",
+      imageHint: "Lifestyle result photo or progress graphic",
+    },
+    {
+      type: "numberedSection",
+      id: generateBlockId(),
+      number: "03",
+      label: "VALUE",
+      headline: "Stronger long-term value per dollar",
+      body: "Compare total cost and longevity, not just the first checkout price.",
+      imageLabel: "Insert value chart",
+      imageHint: "Cost-per-use or long-term savings chart",
+    },
+    {
+      type: "comparison",
+      id: generateBlockId(),
+      heading: `${pt} vs. Typical Alternatives`,
+      rows: [
+        { feature: "Quality", ours: "✓ Higher", theirs: "✗ Mixed" },
+        { feature: "Consistency", ours: "✓ Reliable", theirs: "✗ Inconsistent" },
+        { feature: "Guarantee", ours: "✓ 30 days", theirs: "✗ Limited" },
+        { feature: "Overall Value", ours: "✓ Better long-term", theirs: "✗ Short-term only" },
+      ],
+    },
+    {
+      type: "faq",
+      id: generateBlockId(),
+      heading: "Common Questions",
+      items: [
+        { question: `Is ${pt} suitable for first-time buyers?`, answer: "Yes. The setup and use are straightforward, and support is typically available through official channels." },
+        { question: "Where should I buy it?", answer: "Use the official product page to ensure authenticity, warranty coverage, and current promotions." },
+      ],
+    },
+    {
+      type: "disclaimer",
+      id: generateBlockId(),
+      text: "THIS IS AN ADVERTISEMENT AND NOT AN ACTUAL NEWS ARTICLE, BLOG, OR CONSUMER PROTECTION UPDATE. MARKETING DISCLOSURE: This website is a marketplace. The owner has a monetary connection to the products and services advertised on this site.",
+    },
+  ];
+}
+
 export function generateBlocks(params: GenerateBlocksParams): Block[] {
-  const { productTitle, productHandle, productDescription = "", template, angle } = params;
+  const { productTitle, productHandle, productDescription = "", template, templateVariant, angle } = params;
+
+  if (templateVariant === "story-classic" || templateVariant === "story-uvp-sidebar" || templateVariant === "story-problem-solution") {
+    return generateBasicStoryVariantBlocks(productTitle, productDescription, angle, templateVariant);
+  }
+  if (templateVariant === "listicle-comparison") {
+    return generateBasicListicleComparisonBlocks(productTitle, productDescription);
+  }
 
   if (template === "Story") {
     return generateStoryBlocks(productTitle, productHandle, productDescription, angle);
