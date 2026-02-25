@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { json, Link, useLoaderData } from "@remix-run/react";
+import { json, Link, useLoaderData, useNavigate } from "@remix-run/react";
 import {
   Page,
-  Layout,
   Text,
   Card,
   Button,
@@ -15,10 +14,11 @@ import {
   Badge,
   Box,
   Divider,
-  Banner,
   ProgressBar,
+  Modal,
+  TextField,
 } from "@shopify/polaris";
-import { TitleBar } from "@shopify/app-bridge-react";
+import { TitleBar, Modal as AppBridgeModal } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getPrimaryDomain } from "../lib/shopify.server";
 import prisma from "../db.server";
@@ -50,10 +50,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function Index() {
   const { advertorials, shop } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
   const [setupDismissed, setSetupDismissed] = useState(false);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [campaignName, setCampaignName] = useState("");
+  const [wizardModalOpen, setWizardModalOpen] = useState(false);
+  const [wizardModalSrc, setWizardModalSrc] = useState("");
 
   const hasAdvertorials = advertorials.length > 0;
   const hasPublished = advertorials.some((a) => a.livePageUrl);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type === "WIZARD_DONE") {
+        setWizardModalOpen(false);
+        navigate(`/app/${event.data.id}`);
+      }
+      if (event.data?.type === "WIZARD_CLOSE") {
+        setWizardModalOpen(false);
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [navigate]);
 
   // Setup steps
   const steps = [
@@ -100,6 +120,24 @@ export default function Index() {
   const completedCount = steps.filter((s) => s.completed).length;
   const progress = Math.round((completedCount / steps.length) * 100);
   const showSetup = !setupDismissed && completedCount < steps.length;
+
+  const handleOpenCreateModal = () => {
+    setCreateModalOpen(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    setCreateModalOpen(false);
+    setCampaignName("");
+  };
+
+  const handleCreateAdvertorial = () => {
+    const trimmedName = campaignName.trim();
+    if (!trimmedName) return;
+
+    handleCloseCreateModal();
+    setWizardModalSrc(`/app/new?modal=true&name=${encodeURIComponent(trimmedName)}`);
+    setWizardModalOpen(true);
+  };
 
   return (
     <Page>
@@ -191,11 +229,21 @@ export default function Index() {
                                   {step.action.content}
                                 </Button>
                               ) : (
-                                <Link to={step.action.url}>
-                                  <Button variant="primary" size="slim">
+                                step.id === "create" ? (
+                                  <Button
+                                    variant="primary"
+                                    size="slim"
+                                    onClick={handleOpenCreateModal}
+                                  >
                                     {step.action.content}
                                   </Button>
-                                </Link>
+                                ) : (
+                                  <Link to={step.action.url}>
+                                    <Button variant="primary" size="slim">
+                                      {step.action.content}
+                                    </Button>
+                                  </Link>
+                                )
                               )}
                             </Box>
                           )}
@@ -222,11 +270,13 @@ export default function Index() {
                 Your advertorials
               </Text>
               {hasAdvertorials && (
-                <Link to="/app/new">
-                  <Button variant="primary" size="slim">
-                    Create advertorial
-                  </Button>
-                </Link>
+                <Button
+                  variant="primary"
+                  size="slim"
+                  onClick={handleOpenCreateModal}
+                >
+                  Create advertorial
+                </Button>
               )}
             </InlineStack>
 
@@ -235,7 +285,7 @@ export default function Index() {
                 heading="Your advertorials will show here"
                 action={{
                   content: "Create advertorial",
-                  url: "/app/new",
+                  onAction: handleOpenCreateModal,
                 }}
                 image="https://cdn.shopify.com/s/files/1/0757/9955/files/empty-state.svg"
               >
@@ -322,6 +372,43 @@ export default function Index() {
           </BlockStack>
         </Card>
       </BlockStack>
+
+      <Modal
+        open={createModalOpen}
+        onClose={handleCloseCreateModal}
+        title="Create campaign"
+        primaryAction={{
+          content: "Create",
+          disabled: !campaignName.trim(),
+          onAction: handleCreateAdvertorial,
+        }}
+        secondaryActions={[
+          {
+            content: "Cancel",
+            onAction: handleCloseCreateModal,
+          },
+        ]}
+      >
+        <Modal.Section>
+          <TextField
+            label="Name"
+            value={campaignName}
+            onChange={setCampaignName}
+            autoComplete="off"
+            placeholder="My campaign"
+          />
+        </Modal.Section>
+      </Modal>
+
+      <AppBridgeModal
+        id="wizard-modal"
+        src={wizardModalSrc}
+        open={wizardModalOpen}
+        onHide={() => setWizardModalOpen(false)}
+        {...{ variant: "max" } as any}
+      >
+        <TitleBar title="Create Advertorial" />
+      </AppBridgeModal>
     </Page>
   );
 }

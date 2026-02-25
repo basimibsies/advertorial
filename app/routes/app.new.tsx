@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json, redirect, useActionData, useLoaderData, useNavigation, Form } from "@remix-run/react";
+import { json, redirect, useActionData, useLoaderData, useNavigation, useSearchParams, Form } from "@remix-run/react";
 import {
   Page,
   Text,
@@ -18,6 +18,7 @@ import { createShopifyPage } from "../lib/shopify.server";
 import type { Block, BlockType } from "../lib/blocks";
 import { BLOCK_CATALOG, createEmptyBlock } from "../lib/blocks";
 import { generateFromPremadeTemplate, PREMADE_TEMPLATES, type AngleType } from "../lib/premade-templates";
+import { generateBlocksWithAI } from "../lib/ai.server";
 import prisma from "../db.server";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -133,6 +134,61 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
+  if (step === "ai-generate") {
+    const productId = formData.get("productId") as string;
+    const productTitle = formData.get("productTitle") as string;
+    const productHandle = formData.get("productHandle") as string;
+    const productDescription = (formData.get("productDescription") as string) || "";
+    const primaryColor = (formData.get("primaryColor") as string) || "#22c55e";
+    // Structured intake fields
+    const targetCustomer = (formData.get("targetCustomer") as string) || "";
+    const mechanism = (formData.get("mechanism") as string) || "";
+    const proof = (formData.get("proof") as string) || "";
+    const stylePreset = ((formData.get("stylePreset") as string) || "A") as "A" | "B" | "C" | "D";
+    const imageUrlsRaw = (formData.get("imageUrls") as string) || "";
+    const imageUrls = imageUrlsRaw.split("\n").map((u) => u.trim()).filter(Boolean);
+
+    if (!productId || (!targetCustomer.trim() && !mechanism.trim())) {
+      return json({ error: "Please select a product and fill in the required fields.", step: "ai-generate" }, { status: 400 });
+    }
+
+    try {
+      const blocks = await generateBlocksWithAI({
+        productTitle,
+        productHandle,
+        productDescription,
+        targetCustomer,
+        mechanism,
+        proof,
+        stylePreset,
+        imageUrls,
+      });
+
+      const html = renderBlocks(blocks, { primaryColor, productTitle, productHandle });
+      const title = `${productTitle} — AI Generated`;
+
+      return json({
+        step: "preview",
+        productId,
+        productTitle,
+        productHandle,
+        title,
+        html,
+        blocks,
+        primaryColor,
+        angle: "AI",
+        templateId: "ai-generate",
+        templateName: "AI Generated",
+      });
+    } catch (error) {
+      console.error("AI generation error:", error);
+      return json(
+        { error: error instanceof Error ? error.message : "AI generation failed. Please try again.", step: "ai-generate" },
+        { status: 500 },
+      );
+    }
+  }
+
   if (step === "publish") {
     const productId = formData.get("productId") as string;
     const productTitle = formData.get("productTitle") as string;
@@ -140,6 +196,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const title = formData.get("title") as string;
     const blocksJson = formData.get("blocks") as string;
     const primaryColor = (formData.get("primaryColor") as string) || "#22c55e";
+    const isModal = formData.get("modal") === "true";
 
     if (!productId || !title || !blocksJson) {
       return json({ error: "Missing required fields", step: "publish" }, { status: 400 });
@@ -167,6 +224,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         },
       });
 
+      if (isModal) {
+        return json({ step: "wizardDone", advertorialId: advertorial.id });
+      }
       return redirect(`/app/${advertorial.id}`);
     } catch (error) {
       console.error("Publish error:", error);
@@ -186,6 +246,13 @@ const styles = {
   wizard: {
     maxWidth: "960px",
     margin: "0 auto",
+  } as React.CSSProperties,
+
+  editorWizard: {
+    width: "100%",
+    maxWidth: "1680px",
+    margin: "0 auto",
+    padding: "0 12px",
   } as React.CSSProperties,
 
   progressBar: {
@@ -472,85 +539,396 @@ function TemplateStep({
   onSelect: (id: string) => void;
 }) {
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState("top");
+  const [industryFilter, setIndustryFilter] = useState("industry");
+  const [seasonFilter, setSeasonFilter] = useState("season");
+
+  const getTemplateTheme = (templateId: string) => {
+    const themes: Record<string, {
+      frameBg: string; paperBg: string; heading: string; body: string;
+      accent: string; byline: string; hero: string;
+      typeLabel: string; smallHeadline: string; bigHeadline: string; ctaTextColor: string;
+    }> = {
+      "editorial": {
+        frameBg: "#ebe7dd",
+        paperBg: "linear-gradient(145deg, #f8f5ec 0%, #f0ead8 72%, #e6dcc6 100%)",
+        heading: "#1f2937", body: "#4b5563", accent: "#d9a514", byline: "#6b7280",
+        hero: "linear-gradient(125deg, #e7d5a4 0%, #cfb173 52%, #a67c2e 100%)",
+        typeLabel: "Editorial Article",
+        smallHeadline: "Why This Product Is Trending",
+        bigHeadline: "The Product Review Everyone Is Sharing",
+        ctaTextColor: "#111827",
+      },
+      "personal-story": {
+        frameBg: "#0f172a",
+        paperBg: "linear-gradient(145deg, #111827 0%, #374151 70%, #4b5563 100%)",
+        heading: "#f9fafb", body: "#d1d5db", accent: "#ff2b5f", byline: "#9ca3af",
+        hero: "linear-gradient(125deg, #1f2937 0%, #374151 50%, #6b7280 100%)",
+        typeLabel: "Personal Story",
+        smallHeadline: "I Finally Found What Works",
+        bigHeadline: "How I Solved My Biggest Problem",
+        ctaTextColor: "#ffffff",
+      },
+      "listicle": {
+        frameBg: "#431407",
+        paperBg: "linear-gradient(145deg, #fff7ed 0%, #ffedd5 70%, #fed7aa 100%)",
+        heading: "#7c2d12", body: "#c2410c", accent: "#f97316", byline: "#ea580c",
+        hero: "linear-gradient(125deg, #fb923c 0%, #f97316 52%, #ea580c 100%)",
+        typeLabel: "Listicle Format",
+        smallHeadline: "5 Reasons To Switch Today",
+        bigHeadline: "5 Reasons Thousands Are Making The Switch",
+        ctaTextColor: "#ffffff",
+      },
+      "research-report": {
+        frameBg: "#0c1445",
+        paperBg: "linear-gradient(145deg, #eff6ff 0%, #dbeafe 72%, #bfdbfe 100%)",
+        heading: "#1e3a5f", body: "#1e40af", accent: "#2563eb", byline: "#3b82f6",
+        hero: "linear-gradient(125deg, #60a5fa 0%, #2563eb 52%, #1d4ed8 100%)",
+        typeLabel: "Research Report",
+        smallHeadline: "Clinical Study Reveals Results",
+        bigHeadline: "The Science-Backed Breakthrough You've Been Waiting For",
+        ctaTextColor: "#ffffff",
+      },
+      "before-after": {
+        frameBg: "#240a2e",
+        paperBg: "linear-gradient(145deg, #fdf4ff 0%, #fae8ff 72%, #f0abfc 100%)",
+        heading: "#581c87", body: "#7e22ce", accent: "#a855f7", byline: "#c084fc",
+        hero: "linear-gradient(125deg, #e879f9 0%, #a855f7 52%, #7e22ce 100%)",
+        typeLabel: "Transformation Story",
+        smallHeadline: "My Life Before & After",
+        bigHeadline: "How I Transformed My Life in Just 30 Days",
+        ctaTextColor: "#ffffff",
+      },
+    };
+    return themes[templateId] || themes["editorial"];
+  };
 
   return (
     <div>
-      <div style={styles.heading}>
-        <Text variant="headingLg" as="h2">Choose a template</Text>
-      </div>
-      <p style={styles.subtext}>
-        Each template is a complete advertorial design. Pick one to get started — you can customize everything in the editor.
-      </p>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "20px" }}>
-        {PREMADE_TEMPLATES.map((t) => (
-          <div
-            key={t.id}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", marginBottom: "20px", flexWrap: "wrap" }}>
+        <div>
+          <Text variant="headingLg" as="h2">Choose a template</Text>
+          <p style={{ ...styles.subtext, marginBottom: 0 }}>
+            A template is just a starting point. You'll be able to customize every detail in the editor.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => setActiveFilter("top")}
             style={{
-              ...styles.card(selected === t.id),
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
+              border: activeFilter === "top" ? "1px solid #bfc3c7" : "1px solid #d2d5d8",
+              borderRadius: "8px",
+              backgroundColor: activeFilter === "top" ? "#f3f4f6" : "#fff",
+              color: "#202223",
+              fontSize: "13px",
+              padding: "8px 12px",
+              cursor: "pointer",
             }}
-            onClick={() => onSelect(t.id)}
+          >
+            Top performers
+          </button>
+          <select
+            value={industryFilter}
+            onChange={(e) => setIndustryFilter(e.target.value)}
+            style={{
+              border: "1px solid #d2d5d8",
+              borderRadius: "8px",
+              backgroundColor: "#fff",
+              color: "#6d7175",
+              fontSize: "13px",
+              padding: "8px 12px",
+              cursor: "pointer",
+            }}
+          >
+            <option value="industry">Industry</option>
+          </select>
+          <select
+            value={seasonFilter}
+            onChange={(e) => setSeasonFilter(e.target.value)}
+            style={{
+              border: "1px solid #d2d5d8",
+              borderRadius: "8px",
+              backgroundColor: "#fff",
+              color: "#6d7175",
+              fontSize: "13px",
+              padding: "8px 12px",
+              cursor: "pointer",
+            }}
+          >
+            <option value="season">Season</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveFilter("top");
+              setIndustryFilter("industry");
+              setSeasonFilter("season");
+            }}
+            style={{
+              border: "none",
+              background: "none",
+              color: "#202223",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: "8px 6px",
+            }}
+          >
+            Reset filters
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+        {/* AI Generate option */}
+        <div>
+          <div
+            style={{
+              border: selected === "ai-generate" ? "2px solid #7c3aed" : "1.5px dashed #c4b5fd",
+              borderRadius: "12px",
+              backgroundColor: selected === "ai-generate" ? "#f5f3ff" : "#faf9ff",
+              padding: "14px",
+              cursor: "pointer",
+              boxShadow: selected === "ai-generate" ? "0 0 0 2px rgba(124, 58, 237, 0.15)" : "none",
+              transition: "all 0.15s ease",
+            }}
+            onClick={() => onSelect("ai-generate")}
             role="button"
             tabIndex={0}
           >
-            <div style={{
-              fontSize: "40px",
-              width: "64px",
-              height: "64px",
-              borderRadius: "12px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: selected === t.id ? "#e0ecff" : "#f6f6f7",
-            }}>
-              {t.id === "editorial" ? "📰" : t.id === "personal-story" ? "📖" : "📄"}
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <Text variant="headingMd" as="h3">Generate with AI</Text>
+                <Badge tone="attention">New</Badge>
+              </InlineStack>
+            </InlineStack>
+
+            <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", gap: "14px", marginTop: "12px" }}>
+              {/* Mini thumbnail */}
+              <div style={{
+                borderRadius: "8px",
+                minHeight: "238px",
+                padding: "8px",
+                background: "linear-gradient(145deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+              }}>
+                <div style={{ fontSize: "36px" }}>✨</div>
+                <div style={{ fontSize: "7px", color: "#e9d5ff", textAlign: "center", fontWeight: 600, letterSpacing: "0.5px" }}>AI POWERED</div>
+                <div style={{ display: "grid", gap: "4px", width: "100%", padding: "0 4px" }}>
+                  {[90, 70, 85, 60, 75].map((w, i) => (
+                    <div key={i} style={{ height: "3px", borderRadius: "99px", width: `${w}%`, backgroundColor: "rgba(233,213,255,0.5)" }} />
+                  ))}
+                </div>
+              </div>
+
+              {/* Description panel */}
+              <div style={{
+                borderRadius: "8px",
+                minHeight: "238px",
+                padding: "14px",
+                background: "linear-gradient(145deg, #f5f3ff 0%, #ede9fe 100%)",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                gap: "10px",
+              }}>
+                <div style={{ fontSize: "22px", fontWeight: 800, color: "#4c1d95", lineHeight: 1.1 }}>
+                  Describe it.<br />We'll build it.
+                </div>
+                <div style={{ fontSize: "11px", color: "#6d28d9", lineHeight: 1.5 }}>
+                  Tell the AI your audience, tone, and angle — it writes the full page with real copy.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  {["Custom audience targeting", "Real copy, no placeholders", "Any angle or structure"].map((f) => (
+                    <div key={f} style={{ fontSize: "10px", color: "#5b21b6", display: "flex", alignItems: "center", gap: "5px" }}>
+                      <span style={{ color: "#7c3aed" }}>✓</span> {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div>
-              <Text variant="headingMd" as="h3">{t.name}</Text>
-              <div style={{ marginTop: "6px" }}>
+            <div style={{ marginTop: "10px" }}>
+              <Text variant="bodySm" as="p" tone="subdued">
+                Describe your target audience, tone, and what you want to highlight — the AI writes a complete, ready-to-publish page.
+              </Text>
+            </div>
+          </div>
+        </div>
+
+        {PREMADE_TEMPLATES.map((t) => {
+          const theme = getTemplateTheme(t.id);
+          return (
+          <div key={t.id}>
+            <div
+              style={{
+                border: selected === t.id ? "2px solid #2C6ECB" : "1px solid #d2d5d8",
+                borderRadius: "12px",
+                backgroundColor: "#fff",
+                padding: "14px",
+                cursor: "pointer",
+                boxShadow: selected === t.id ? "0 0 0 2px rgba(44, 110, 203, 0.12)" : "none",
+              }}
+              onClick={() => onSelect(t.id)}
+              role="button"
+              tabIndex={0}
+            >
+              <InlineStack align="space-between" blockAlign="center">
+                <InlineStack gap="200" blockAlign="center">
+                  <Text variant="headingMd" as="h3">{t.name}</Text>
+                  <Badge tone="info">Top Performer</Badge>
+                </InlineStack>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPreviewingId(t.id);
+                  }}
+                  style={{
+                    background: "none",
+                    border: "1px solid #c9cccf",
+                    borderRadius: "6px",
+                    padding: "6px 10px",
+                    fontSize: "12px",
+                    color: "#202223",
+                    cursor: "pointer",
+                  }}
+                >
+                  Preview
+                </button>
+              </InlineStack>
+
+              <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", gap: "14px", marginTop: "12px" }}>
+                {/* Small thumbnail */}
+                <div style={{
+                  borderRadius: "8px",
+                  minHeight: "238px",
+                  padding: "8px",
+                  backgroundColor: theme.frameBg,
+                  position: "relative",
+                  overflow: "hidden",
+                }}>
+                  <div style={{ borderRadius: "6px", background: theme.paperBg, padding: "8px" }}>
+                    <div style={{ fontSize: "7px", fontWeight: 700, letterSpacing: "0.6px", color: theme.byline, textTransform: "uppercase" }}>
+                      {t.name}
+                    </div>
+                    <div style={{ fontSize: "13px", lineHeight: 1.1, fontWeight: 800, marginTop: "6px", color: theme.heading }}>
+                      {theme.smallHeadline}
+                    </div>
+                    <div style={{ fontSize: "6.5px", marginTop: "5px", color: theme.byline }}>
+                      By Editor Team • Today
+                    </div>
+                    {t.id === "listicle" ? (
+                      <div style={{ height: "48px", borderRadius: "5px", marginTop: "7px", background: theme.hero, padding: "5px 6px", display: "flex", flexDirection: "column", justifyContent: "space-around" }}>
+                        {["01", "02", "03"].map((n) => (
+                          <div key={n} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ fontSize: "5px", fontWeight: 900, color: "#fff", background: "rgba(0,0,0,0.25)", borderRadius: "2px", padding: "1px 3px", minWidth: "10px", textAlign: "center" }}>{n}</span>
+                            <div style={{ flex: 1, height: "3px", borderRadius: "99px", background: "rgba(255,255,255,0.45)" }} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : t.id === "research-report" ? (
+                      <div style={{ height: "48px", borderRadius: "5px", marginTop: "7px", background: theme.hero, padding: "4px 6px", display: "flex", alignItems: "flex-end", gap: "3px", justifyContent: "center" }}>
+                        {[40, 62, 78, 92, 55].map((h, i) => (
+                          <div key={i} style={{ flex: 1, height: `${Math.round(h * 0.35)}px`, borderRadius: "2px 2px 0 0", background: "rgba(255,255,255,0.6)" }} />
+                        ))}
+                      </div>
+                    ) : t.id === "before-after" ? (
+                      <div style={{ height: "48px", borderRadius: "5px", marginTop: "7px", background: theme.hero, padding: "4px", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
+                        <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: "3px", padding: "2px 4px", fontSize: "5px", fontWeight: 800, color: "#fff" }}>BEFORE</div>
+                        <div style={{ fontSize: "9px", color: "rgba(255,255,255,0.9)" }}>→</div>
+                        <div style={{ background: "rgba(255,255,255,0.25)", borderRadius: "3px", padding: "2px 4px", fontSize: "5px", fontWeight: 800, color: "#fff" }}>AFTER</div>
+                      </div>
+                    ) : (
+                      <div style={{ height: "48px", borderRadius: "5px", marginTop: "7px", background: theme.hero }} />
+                    )}
+                    <div style={{ marginTop: "7px", display: "grid", gap: "4px" }}>
+                      <div style={{ height: "4px", borderRadius: "99px", width: "94%", backgroundColor: theme.body, opacity: 0.38 }} />
+                      <div style={{ height: "4px", borderRadius: "99px", width: "100%", backgroundColor: theme.body, opacity: 0.38 }} />
+                      <div style={{ height: "4px", borderRadius: "99px", width: "78%", backgroundColor: theme.body, opacity: 0.38 }} />
+                    </div>
+                    <div style={{ fontSize: "6px", fontWeight: 700, borderRadius: "4px", marginTop: "7px", textAlign: "center", padding: "5px 0", backgroundColor: theme.accent, color: theme.ctaTextColor }}>
+                      CHECK AVAILABILITY
+                    </div>
+                  </div>
+                </div>
+
+                {/* Large thumbnail */}
+                <div style={{
+                  borderRadius: "8px",
+                  minHeight: "238px",
+                  padding: "8px",
+                  backgroundColor: theme.frameBg,
+                  position: "relative",
+                  overflow: "hidden",
+                }}>
+                  <div style={{ borderRadius: "6px", background: theme.paperBg, padding: "14px" }}>
+                    <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.8px", color: theme.byline, textTransform: "uppercase" }}>
+                      {theme.typeLabel}
+                    </div>
+                    <div style={{ fontSize: "28px", lineHeight: 1.02, fontWeight: 800, marginTop: "9px", color: theme.heading }}>
+                      {theme.bigHeadline}
+                    </div>
+                    <div style={{ fontSize: "10px", marginTop: "7px", color: theme.byline }}>
+                      By Sarah M. • Updated today
+                    </div>
+                    {t.id === "listicle" ? (
+                      <div style={{ height: "88px", borderRadius: "6px", marginTop: "10px", background: theme.hero, padding: "8px 10px", display: "flex", flexDirection: "column", justifyContent: "space-around" }}>
+                        {["01", "02", "03", "04", "05"].map((n) => (
+                          <div key={n} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontSize: "7px", fontWeight: 900, color: "#fff", background: "rgba(0,0,0,0.22)", borderRadius: "3px", padding: "1px 4px", minWidth: "14px", textAlign: "center" }}>{n}</span>
+                            <div style={{ flex: 1, height: "4px", borderRadius: "99px", background: "rgba(255,255,255,0.45)" }} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : t.id === "research-report" ? (
+                      <div style={{ height: "88px", borderRadius: "6px", marginTop: "10px", background: theme.hero, padding: "10px 10px 8px", display: "flex", alignItems: "flex-end", gap: "5px", justifyContent: "center" }}>
+                        {[45, 65, 80, 92, 58, 75].map((h, i) => (
+                          <div key={i} style={{ flex: 1, height: `${Math.round(h * 0.56)}px`, borderRadius: "2px 2px 0 0", background: "rgba(255,255,255,0.55)" }} />
+                        ))}
+                      </div>
+                    ) : t.id === "before-after" ? (
+                      <div style={{ height: "88px", borderRadius: "6px", marginTop: "10px", background: theme.hero, padding: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                        <div style={{ flex: 1, background: "rgba(0,0,0,0.22)", borderRadius: "5px", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                          <span style={{ fontSize: "7px", fontWeight: 700, color: "rgba(255,255,255,0.65)" }}>BEFORE</span>
+                          <div style={{ width: "22px", height: "22px", borderRadius: "50%", background: "rgba(255,255,255,0.2)" }} />
+                          <div style={{ height: "3px", borderRadius: "99px", width: "65%", background: "rgba(255,255,255,0.3)" }} />
+                          <div style={{ height: "3px", borderRadius: "99px", width: "55%", background: "rgba(255,255,255,0.3)" }} />
+                        </div>
+                        <div style={{ fontSize: "18px", color: "rgba(255,255,255,0.9)", flexShrink: 0 }}>→</div>
+                        <div style={{ flex: 1, background: "rgba(255,255,255,0.18)", borderRadius: "5px", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                          <span style={{ fontSize: "7px", fontWeight: 700, color: "#fff" }}>AFTER</span>
+                          <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(255,255,255,0.4)" }} />
+                          <div style={{ height: "3px", borderRadius: "99px", width: "80%", background: "rgba(255,255,255,0.6)" }} />
+                          <div style={{ height: "3px", borderRadius: "99px", width: "70%", background: "rgba(255,255,255,0.6)" }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ height: "88px", borderRadius: "6px", marginTop: "10px", background: theme.hero }} />
+                    )}
+                    <div style={{ marginTop: "10px", display: "grid", gap: "6px" }}>
+                      <div style={{ height: "6px", borderRadius: "99px", width: "100%", backgroundColor: theme.body, opacity: 0.36 }} />
+                      <div style={{ height: "6px", borderRadius: "99px", width: "94%", backgroundColor: theme.body, opacity: 0.36 }} />
+                      <div style={{ height: "6px", borderRadius: "99px", width: "98%", backgroundColor: theme.body, opacity: 0.36 }} />
+                      <div style={{ height: "6px", borderRadius: "99px", width: "78%", backgroundColor: theme.body, opacity: 0.36 }} />
+                    </div>
+                    <div style={{ display: "inline-block", fontSize: "9px", fontWeight: 800, borderRadius: "5px", marginTop: "10px", padding: "7px 12px", backgroundColor: theme.accent, color: theme.ctaTextColor }}>
+                      SHOP NOW
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: "10px" }}>
                 <Text variant="bodySm" as="p" tone="subdued">{t.description}</Text>
               </div>
             </div>
-            <div style={{ marginTop: "4px" }}>
-              <button
-                onClick={(e) => { e.stopPropagation(); setPreviewingId(t.id); }}
-                style={{
-                  background: "none",
-                  border: "1px solid #c9cccf",
-                  borderRadius: "6px",
-                  padding: "6px 14px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "#2C6ECB",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#f0f6ff"; (e.currentTarget as HTMLElement).style.borderColor = "#2C6ECB"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "#c9cccf"; }}
-              >Preview Template</button>
-            </div>
-            {selected === t.id && (
-              <div style={{
-                position: "absolute",
-                top: "12px",
-                right: "12px",
-                width: "24px",
-                height: "24px",
-                borderRadius: "50%",
-                backgroundColor: "#2C6ECB",
-                color: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "14px",
-                fontWeight: 700,
-              }}>✓</div>
-            )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {previewingId && (
@@ -742,6 +1120,211 @@ function BrandStep({
   );
 }
 
+// ─── Step: AI Intake ──────────────────────────────────────────────────────────
+
+interface AIIntake {
+  targetCustomer: string;
+  mechanism: string;
+  proof: string;
+  stylePreset: "A" | "B" | "C" | "D" | "";
+  imageUrls: string;
+}
+
+const AI_STYLE_PRESETS = [
+  {
+    id: "A" as const,
+    name: "Clinical Editorial",
+    description: "Medical authority. Doctor/specialist framing. Best for supplements, health, skincare.",
+    accent: "#2563eb",
+    bg: "#eff6ff",
+    border: "#bfdbfe",
+    example: '"The Supplement Dermatologists Are Recommending to Their Own Patients"',
+  },
+  {
+    id: "B" as const,
+    name: "Lifestyle Magazine",
+    description: "Cosmopolitan/GQ editorial feel. Polished, aspirational. Best for beauty, fashion, home.",
+    accent: "#be123c",
+    bg: "#fff1f2",
+    border: "#fecdd3",
+    example: '"5 Women Over 40 Are Using This Every Morning — Editors Tested It"',
+  },
+  {
+    id: "C" as const,
+    name: "News Exposé",
+    description: "Urgent, revealing, investigative. 'Industry insiders say…' Best for weight loss, hidden truth angles.",
+    accent: "#b45309",
+    bg: "#fffbeb",
+    border: "#fde68a",
+    example: '"BREAKING: The Weight Loss Industry Has Been Hiding This Simple Fix"',
+  },
+  {
+    id: "D" as const,
+    name: "Warm & Trustworthy",
+    description: "Like a text from a trusted friend. Personal, conversational. Best for pet, family, food.",
+    accent: "#16a34a",
+    bg: "#f0fdf4",
+    border: "#bbf7d0",
+    example: '"I Tried Everything for My Dog\'s Joint Pain. Nothing Worked Until This."',
+  },
+];
+
+function AIIntakeField({
+  label,
+  hint,
+  placeholder,
+  value,
+  onChange,
+  rows = 3,
+  required = true,
+}: {
+  label: string;
+  hint: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  required?: boolean;
+}) {
+  return (
+    <div style={{ marginBottom: "20px" }}>
+      <div style={{ marginBottom: "4px", display: "flex", alignItems: "baseline", gap: "6px" }}>
+        <label style={{ fontSize: "14px", fontWeight: 600, color: "#202223" }}>
+          {label}
+          {required && <span style={{ color: "#e03131", marginLeft: "2px" }}>*</span>}
+        </label>
+        <span style={{ fontSize: "12px", color: "#8c9196" }}>—</span>
+        <span style={{ fontSize: "12px", color: "#6d7175" }}>{hint}</span>
+      </div>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        style={{
+          width: "100%",
+          padding: "12px 14px",
+          fontSize: "14px",
+          lineHeight: "1.55",
+          border: "1.5px solid #d2d5d8",
+          borderRadius: "8px",
+          resize: "vertical",
+          fontFamily: "inherit",
+          color: "#202223",
+          backgroundColor: "#fff",
+          outline: "none",
+          boxSizing: "border-box",
+        }}
+        onFocus={(e) => { e.target.style.borderColor = "#2C6ECB"; }}
+        onBlur={(e) => { e.target.style.borderColor = "#d2d5d8"; }}
+      />
+    </div>
+  );
+}
+
+function AIIntakeStep({
+  selectedProductTitle,
+  aiIntake,
+  onChange,
+}: {
+  selectedProductTitle: string;
+  aiIntake: AIIntake;
+  onChange: (updates: Partial<AIIntake>) => void;
+}) {
+  return (
+    <div>
+      <div style={styles.heading}>
+        <Text variant="headingLg" as="h2">Tell us about your advertorial</Text>
+      </div>
+      <p style={styles.subtext}>
+        The more specific you are, the better the AI copy.
+        {selectedProductTitle && <> Generating for: <strong>{selectedProductTitle}</strong>.</>}
+      </p>
+
+      <div style={{ maxWidth: "720px" }}>
+        <AIIntakeField
+          label="Who is this for?"
+          hint="Your target customer"
+          placeholder="e.g. Women 35–55 who struggle with joint pain after exercise, frustrated with products that wear off quickly"
+          value={aiIntake.targetCustomer}
+          onChange={(v) => onChange({ targetCustomer: v })}
+          rows={3}
+        />
+
+        <AIIntakeField
+          label="What makes this product different?"
+          hint="The mechanism or unique angle"
+          placeholder="e.g. Liposomal delivery system that reaches joint tissue 3× faster than standard glucosamine — this is why it works when others don't"
+          value={aiIntake.mechanism}
+          onChange={(v) => onChange({ mechanism: v })}
+          rows={3}
+        />
+
+        <AIIntakeField
+          label="What proof do you have?"
+          hint="Reviews, ratings, press, endorsements"
+          placeholder="e.g. 4.8 stars from 12,400+ verified reviews, featured in Men's Health, endorsed by Dr. James Carter, 60,000+ customers"
+          value={aiIntake.proof}
+          onChange={(v) => onChange({ proof: v })}
+          rows={2}
+        />
+
+        {/* Style Preset */}
+        <div style={{ marginBottom: "20px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "#202223", marginBottom: "4px" }}>
+            Page style <span style={{ color: "#e03131" }}>*</span>
+            <span style={{ fontSize: "12px", fontWeight: 400, color: "#6d7175", marginLeft: "8px" }}>— Sets tone, authority figure, and headline pattern</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            {AI_STYLE_PRESETS.map((preset) => {
+              const sel = aiIntake.stylePreset === preset.id;
+              return (
+                <div
+                  key={preset.id}
+                  onClick={() => onChange({ stylePreset: preset.id })}
+                  role="button"
+                  tabIndex={0}
+                  style={{
+                    border: sel ? `2px solid ${preset.accent}` : `1.5px solid ${preset.border}`,
+                    borderRadius: "10px",
+                    padding: "14px",
+                    cursor: "pointer",
+                    backgroundColor: sel ? preset.bg : "#fafafa",
+                    boxShadow: sel ? `0 0 0 1px ${preset.accent}30` : "none",
+                    transition: "all 0.12s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                    <div style={{
+                      width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${sel ? preset.accent : "#d2d5d8"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}>
+                      {sel && <div style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: preset.accent }} />}
+                    </div>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: sel ? preset.accent : "#202223" }}>{preset.name}</span>
+                  </div>
+                  <p style={{ margin: "0 0 6px 28px", fontSize: "12px", color: "#6d7175", lineHeight: 1.45 }}>{preset.description}</p>
+                  <p style={{ margin: "0 0 0 28px", fontSize: "11px", color: sel ? preset.accent : "#9ca3af", fontStyle: "italic", lineHeight: 1.4 }}>{preset.example}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <AIIntakeField
+          label="Product image URLs"
+          hint="optional — one per line"
+          placeholder={"https://cdn.shopify.com/...\nhttps://cdn.shopify.com/..."}
+          value={aiIntake.imageUrls}
+          onChange={(v) => onChange({ imageUrls: v })}
+          rows={2}
+          required={false}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── Block Label Helper ──────────────────────────────────────────────────────
 
 function getBlockMeta(block: Block): { icon: string; label: string } {
@@ -760,6 +1343,9 @@ function BlockEditorStep({
   isSubmitting,
   error,
   previewData,
+  onClose,
+  isModal,
+  brandFonts,
 }: {
   title: string;
   blocks: Block[];
@@ -769,13 +1355,46 @@ function BlockEditorStep({
   isSubmitting: boolean;
   error?: string;
   previewData: any;
+  onClose?: () => void;
+  isModal?: boolean;
+  brandFonts?: {
+    headerFont?: string;
+    bodyFont?: string;
+  };
 }) {
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<"blocks" | "settings">("blocks");
+  const [previewDevice, setPreviewDevice] = useState<"mobile" | "desktop">("desktop");
+  const [editorPrimaryColor, setEditorPrimaryColor] = useState(primaryColor);
+  const [textColor, setTextColor] = useState("#111827");
+  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
+  const [accentForegroundColor, setAccentForegroundColor] = useState("#ffffff");
+  const [displayFont, setDisplayFont] = useState(
+    brandFonts?.headerFont || "system-ui, -apple-system, sans-serif",
+  );
+  const [bodyFont, setBodyFont] = useState(
+    brandFonts?.bodyFont || "system-ui, -apple-system, sans-serif",
+  );
+  const [heading1Size, setHeading1Size] = useState(52);
+  const [heading2Size, setHeading2Size] = useState(36);
+  const [body1Size, setBody1Size] = useState(20);
+  const [body2Size, setBody2Size] = useState(16);
 
-  const renderOpts = { primaryColor, productTitle, productHandle };
+  const renderOpts = { primaryColor: editorPrimaryColor, productTitle, productHandle };
+
+  const ensureFontStack = (font: string) => {
+    const lower = font.toLowerCase();
+    if (
+      lower.includes("sans-serif") ||
+      lower.includes("serif") ||
+      lower.includes("monospace")
+    ) {
+      return font;
+    }
+    return `${font}, system-ui, -apple-system, sans-serif`;
+  };
+  const resolvedBodyFont = ensureFontStack(bodyFont);
 
   const [renderFn, setRenderFn] = useState<((b: Block, opts: any) => string) | null>(null);
   useEffect(() => {
@@ -799,7 +1418,6 @@ function BlockEditorStep({
     setBlocks(blocks.filter((b) => b.id !== id));
     if (selectedBlockId === id) {
       setSelectedBlockId(null);
-      setSidebarTab("blocks");
     }
   };
 
@@ -821,7 +1439,6 @@ function BlockEditorStep({
     }
     setBlocks(newBlocks);
     setSelectedBlockId(newBlock.id);
-    setSidebarTab("settings");
   };
 
   const updateBlock = (id: string, updates: Partial<Block>) => {
@@ -830,11 +1447,54 @@ function BlockEditorStep({
 
   const selectBlock = (id: string) => {
     setSelectedBlockId(id);
-    setSidebarTab("settings");
   };
 
   return (
-    <div>
+    <div
+      style={{
+        backgroundColor: "#f3f4f6",
+        border: "1px solid #d2d5d8",
+        borderRadius: "14px",
+        overflow: "hidden",
+        boxShadow: "0 20px 48px rgba(15, 23, 42, 0.08)",
+      }}
+    >
+      <div
+        style={{
+          height: "46px",
+          borderBottom: "1px solid #e1e3e5",
+          backgroundColor: "#fff",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 14px",
+        }}
+      >
+        <InlineStack gap="200" blockAlign="center">
+          <span style={{ fontSize: "14px" }}>✏️</span>
+          <Text variant="bodyMd" as="span" fontWeight="semibold">
+            Advertorial
+          </Text>
+        </InlineStack>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            border: "none",
+            background: "none",
+            fontSize: "22px",
+            lineHeight: 1,
+            color: "#6d7175",
+            cursor: "pointer",
+            padding: "0 4px",
+          }}
+          aria-label="Close editor"
+        >
+          ×
+        </button>
+      </div>
+
+      <div style={{ padding: "14px" }}>
       {error && (
         <div style={{ marginBottom: "16px" }}>
           <Banner tone="critical" title="Error">{error}</Banner>
@@ -861,7 +1521,8 @@ function BlockEditorStep({
             <input type="hidden" name="title" value={previewData?.title} />
             <input type="hidden" name="angle" value={previewData?.angle || "Desire"} />
             <input type="hidden" name="blocks" value={JSON.stringify(blocks)} />
-            <input type="hidden" name="primaryColor" value={primaryColor} />
+            <input type="hidden" name="primaryColor" value={editorPrimaryColor} />
+            {isModal && <input type="hidden" name="modal" value="true" />}
             <Button submit variant="primary" loading={isSubmitting}>
               Publish to Shopify
             </Button>
@@ -869,74 +1530,405 @@ function BlockEditorStep({
         </div>
       </div>
 
-      {/* Two-column editor */}
-      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "0", minHeight: "700px" }}>
-
-        {/* LEFT SIDEBAR */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "280px minmax(0,1fr) 320px",
+        gap: "16px",
+        minHeight: "760px",
+      }}>
         <div style={{
-          borderRight: "1px solid #e1e3e5",
-          backgroundColor: "#fafbfc",
-          borderRadius: "12px 0 0 12px",
+          backgroundColor: "#f9fafb",
+          border: "1px solid #e1e3e5",
+          borderRadius: "12px",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
+          minHeight: "760px",
         }}>
-          <div style={{ display: "flex", borderBottom: "1px solid #e1e3e5" }}>
-            <button
-              onClick={() => setSidebarTab("blocks")}
-              style={{
-                flex: 1, padding: "12px", border: "none", cursor: "pointer",
-                fontSize: "13px", fontWeight: sidebarTab === "blocks" ? 600 : 400,
-                backgroundColor: sidebarTab === "blocks" ? "#fff" : "transparent",
-                color: sidebarTab === "blocks" ? "#202223" : "#6d7175",
-                borderBottom: sidebarTab === "blocks" ? "2px solid #2C6ECB" : "2px solid transparent",
-              }}
-            >Add Blocks</button>
-            <button
-              onClick={() => setSidebarTab("settings")}
-              style={{
-                flex: 1, padding: "12px", border: "none", cursor: "pointer",
-                fontSize: "13px", fontWeight: sidebarTab === "settings" ? 600 : 400,
-                backgroundColor: sidebarTab === "settings" ? "#fff" : "transparent",
-                color: sidebarTab === "settings" ? "#202223" : "#6d7175",
-                borderBottom: sidebarTab === "settings" ? "2px solid #2C6ECB" : "2px solid transparent",
-              }}
-            >Settings</button>
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid #e1e3e5", backgroundColor: "#fff" }}>
+            <Text variant="headingSm" as="h3">Blocks</Text>
+            <Text as="p" variant="bodySm" tone="subdued">Insert after selected block</Text>
           </div>
-
           <div style={{ padding: "12px", overflowY: "auto", flex: 1 }}>
-            {sidebarTab === "blocks" && (
-              <div>
-                <div style={{ fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", color: "#6d7175", marginBottom: "8px" }}>
-                  Click to add
+            {BLOCK_CATALOG.map((entry) => (
+              <button
+                key={entry.type}
+                type="button"
+                onClick={() => addBlock(entry.type, selectedIndex >= 0 ? selectedIndex : undefined)}
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #e1e3e5",
+                  cursor: "pointer",
+                  marginBottom: "6px",
+                  backgroundColor: "#fff",
+                }}
+              >
+                <span style={{ fontSize: "20px", width: "24px", textAlign: "center" }}>{entry.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: "13px", color: "#202223" }}>{entry.label}</div>
+                  <div style={{ fontSize: "11px", color: "#6d7175", lineHeight: 1.35 }}>{entry.description}</div>
                 </div>
-                {BLOCK_CATALOG.map((entry) => (
-                  <div
-                    key={entry.type}
-                    onClick={() => addBlock(entry.type, selectedIndex >= 0 ? selectedIndex : undefined)}
-                    role="button"
-                    tabIndex={0}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "10px",
-                      padding: "10px 12px", borderRadius: "8px", cursor: "pointer",
-                      marginBottom: "4px", backgroundColor: "#fff",
-                      border: "1px solid #e9ecef",
-                      transition: "all 0.1s ease",
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#2C6ECB"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0f6ff"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#e9ecef"; (e.currentTarget as HTMLElement).style.backgroundColor = "#fff"; }}
-                  >
-                    <span style={{ fontSize: "20px", width: "28px", textAlign: "center" }}>{entry.icon}</span>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: "13px", color: "#202223" }}>{entry.label}</div>
-                      <div style={{ fontSize: "11px", color: "#868e96", lineHeight: 1.3 }}>{entry.description}</div>
-                    </div>
+              </button>
+            ))}
+
+            <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #e1e3e5" }}>
+              <Text variant="headingXs" as="h4">Page structure</Text>
+              <div style={{ marginTop: "8px", display: "grid", gap: "6px" }}>
+                {blocks.map((block) => {
+                  const { icon, label } = getBlockMeta(block);
+                  const active = block.id === selectedBlockId;
+                  return (
+                    <button
+                      key={`nav-${block.id}`}
+                      type="button"
+                      onClick={() => selectBlock(block.id)}
+                      style={{
+                        border: active ? "1px solid #2C6ECB" : "1px solid #e1e3e5",
+                        backgroundColor: active ? "#eef4ff" : "#fff",
+                        borderRadius: "8px",
+                        padding: "8px 10px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <span>{icon}</span> {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #e1e3e5" }}>
+              <Text variant="headingXs" as="h4">Colors</Text>
+              <div style={{ marginTop: "8px", display: "grid", gap: "8px" }}>
+                {[
+                  { label: "Text", value: textColor, setValue: setTextColor },
+                  { label: "Background", value: backgroundColor, setValue: setBackgroundColor },
+                  { label: "Accent", value: editorPrimaryColor, setValue: setEditorPrimaryColor },
+                  { label: "Accent foreground", value: accentForegroundColor, setValue: setAccentForegroundColor },
+                ].map((color) => (
+                  <div key={color.label} style={{ display: "grid", gridTemplateColumns: "1fr 42px", gap: "8px", alignItems: "center" }}>
+                    <input
+                      value={color.value}
+                      onChange={(e) => color.setValue(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "7px 9px",
+                        border: "1px solid #d2d5d8",
+                        borderRadius: "7px",
+                        fontSize: "12px",
+                      }}
+                      aria-label={color.label}
+                    />
+                    <input
+                      type="color"
+                      value={color.value}
+                      onChange={(e) => color.setValue(e.target.value)}
+                      style={{
+                        width: "42px",
+                        height: "32px",
+                        border: "1px solid #d2d5d8",
+                        borderRadius: "7px",
+                        padding: 0,
+                        background: "none",
+                        cursor: "pointer",
+                      }}
+                      aria-label={`${color.label} picker`}
+                    />
                   </div>
                 ))}
               </div>
-            )}
+            </div>
 
-            {sidebarTab === "settings" && selectedBlock && (
+            <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #e1e3e5" }}>
+              <Text variant="headingXs" as="h4">Fonts</Text>
+              <div style={{ marginTop: "8px", display: "grid", gap: "8px" }}>
+                <select
+                  value={displayFont}
+                  onChange={(e) => setDisplayFont(e.target.value)}
+                  style={{ width: "100%", padding: "7px 9px", border: "1px solid #d2d5d8", borderRadius: "7px", fontSize: "12px" }}
+                >
+                  <option value={brandFonts?.headerFont || "system-ui, -apple-system, sans-serif"}>Brand default (Display)</option>
+                  <option value="Inter, system-ui, -apple-system, sans-serif">Inter (Display)</option>
+                  <option value="Poppins, system-ui, -apple-system, sans-serif">Poppins (Display)</option>
+                  <option value="Montserrat, system-ui, -apple-system, sans-serif">Montserrat (Display)</option>
+                </select>
+                <select
+                  value={bodyFont}
+                  onChange={(e) => setBodyFont(e.target.value)}
+                  style={{ width: "100%", padding: "7px 9px", border: "1px solid #d2d5d8", borderRadius: "7px", fontSize: "12px" }}
+                >
+                  <option value={brandFonts?.bodyFont || "system-ui, -apple-system, sans-serif"}>Brand default (Body)</option>
+                  <option value="Inter, system-ui, -apple-system, sans-serif">Inter (Body)</option>
+                  <option value="Lato, system-ui, -apple-system, sans-serif">Lato (Body)</option>
+                  <option value="'Open Sans', system-ui, -apple-system, sans-serif">Open Sans (Body)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid #e1e3e5" }}>
+              <Text variant="headingXs" as="h4">Text styles</Text>
+              <div style={{ marginTop: "8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                {[
+                  { label: "Heading 1", value: heading1Size, setValue: setHeading1Size },
+                  { label: "Heading 2", value: heading2Size, setValue: setHeading2Size },
+                  { label: "Body 1", value: body1Size, setValue: setBody1Size },
+                  { label: "Body 2", value: body2Size, setValue: setBody2Size },
+                ].map((sizeField) => (
+                  <label key={sizeField.label} style={{ fontSize: "11px", color: "#6d7175" }}>
+                    {sizeField.label}
+                    <input
+                      type="number"
+                      value={sizeField.value}
+                      min={10}
+                      max={80}
+                      onChange={(e) => sizeField.setValue(Number(e.target.value))}
+                      style={{
+                        marginTop: "4px",
+                        width: "100%",
+                        padding: "7px 9px",
+                        border: "1px solid #d2d5d8",
+                        borderRadius: "7px",
+                        fontSize: "12px",
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          backgroundColor: "#eff1f3",
+          border: "1px solid #d9dcdf",
+          borderRadius: "12px",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          minHeight: "760px",
+        }}>
+          <div style={{
+            backgroundColor: "#fff",
+            borderBottom: "1px solid #e1e3e5",
+            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}>
+            <InlineStack gap="200" blockAlign="center">
+              <div style={{ display: "inline-flex", padding: "2px", backgroundColor: "#f1f2f4", borderRadius: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice("mobile")}
+                  style={{
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
+                    backgroundColor: previewDevice === "mobile" ? "#111827" : "transparent",
+                    color: previewDevice === "mobile" ? "#fff" : "#374151",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Mobile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDevice("desktop")}
+                  style={{
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "6px 12px",
+                    backgroundColor: previewDevice === "desktop" ? "#111827" : "transparent",
+                    color: previewDevice === "desktop" ? "#fff" : "#374151",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Desktop
+                </button>
+              </div>
+              <Badge tone="info">{previewDevice === "mobile" ? "iPhone 15" : "Desktop 1440px"}</Badge>
+            </InlineStack>
+            <Text variant="bodySm" as="span" tone="subdued">
+              Click blocks to edit
+            </Text>
+          </div>
+
+          <div style={{ padding: "24px", overflowY: "auto", flex: 1 }}>
+            <div style={{
+              maxWidth: previewDevice === "mobile" ? "390px" : "920px",
+              margin: "0 auto",
+              backgroundColor,
+              color: textColor,
+              fontFamily: resolvedBodyFont,
+              borderRadius: "10px",
+              border: "1px solid #d8dadd",
+              boxShadow: "0 10px 28px rgba(17, 24, 39, 0.12)",
+              overflow: "hidden",
+            }}>
+              <div style={{ padding: previewDevice === "mobile" ? "16px" : "24px 32px", fontSize: `${body2Size}px` }}>
+                {blocks.map((block, index) => {
+                  const { icon, label } = getBlockMeta(block);
+                  const isSelected = selectedBlockId === block.id;
+                  const isHovered = hoveredBlockId === block.id;
+                  const blockHtml = renderFn ? renderFn(block, renderOpts) : "<div style='padding:16px;color:#868e96;'>Loading...</div>";
+
+                  return (
+                    <div key={block.id}>
+                      <div
+                        onClick={(e) => { e.stopPropagation(); addBlock("text", index - 1); }}
+                        style={{
+                          height: "4px",
+                          margin: "0 -8px",
+                          borderRadius: "2px",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                          position: "relative",
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2C6ECB20"; (e.currentTarget as HTMLElement).style.height = "24px"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.height = "4px"; }}
+                        title="Click to insert block here"
+                      />
+
+                      <div
+                        onClick={() => selectBlock(block.id)}
+                        onMouseEnter={() => setHoveredBlockId(block.id)}
+                        onMouseLeave={() => setHoveredBlockId(null)}
+                        style={{
+                          position: "relative",
+                          margin: "0 -8px",
+                          padding: "0 8px",
+                          borderRadius: "4px",
+                          outline: isSelected
+                            ? "2px solid #2C6ECB"
+                            : isHovered
+                              ? "2px solid #2C6ECB40"
+                              : "2px solid transparent",
+                          cursor: "pointer",
+                          transition: "outline 0.1s ease",
+                        }}
+                      >
+                        {(isSelected || isHovered) && (
+                          <div style={{
+                            position: "absolute",
+                            top: "-1px",
+                            left: "8px",
+                            transform: "translateY(-100%)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            backgroundColor: isSelected ? "#2C6ECB" : "#2C6ECB99",
+                            color: "#fff",
+                            padding: "2px 8px",
+                            borderRadius: "4px 4px 0 0",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            zIndex: 10,
+                            whiteSpace: "nowrap",
+                          }}>
+                            <span>{icon}</span> {label}
+                          </div>
+                        )}
+
+                        {isSelected && (
+                          <div style={{
+                            position: "absolute",
+                            top: "-1px",
+                            right: "8px",
+                            transform: "translateY(-100%)",
+                            display: "flex",
+                            gap: "2px",
+                            zIndex: 10,
+                          }}>
+                            {[
+                              { label: "↑", action: () => moveBlock(index, "up"), disabled: index === 0 },
+                              { label: "↓", action: () => moveBlock(index, "down"), disabled: index === blocks.length - 1 },
+                              { label: "⧉", action: () => duplicateBlock(index), disabled: false },
+                              { label: "✕", action: () => deleteBlock(block.id), disabled: false },
+                            ].map((btn, i) => (
+                              <button
+                                key={i}
+                                onClick={(e) => { e.stopPropagation(); btn.action(); }}
+                                disabled={btn.disabled}
+                                style={{
+                                  padding: "3px 8px",
+                                  border: "none",
+                                  borderRadius: i === 0 ? "4px 0 0 0" : i === 3 ? "0 4px 0 0" : "0",
+                                  cursor: btn.disabled ? "default" : "pointer",
+                                  fontSize: "12px",
+                                  backgroundColor: btn.label === "✕" ? "#e03131" : "#2C6ECB",
+                                  color: "#fff",
+                                  opacity: btn.disabled ? 0.4 : 1,
+                                }}
+                              >{btn.label}</button>
+                            ))}
+                          </div>
+                        )}
+
+                        <div
+                          dangerouslySetInnerHTML={{ __html: blockHtml }}
+                          style={{ pointerEvents: "none" }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div
+                  onClick={() => addBlock("text")}
+                  style={{
+                    margin: "16px 0 24px",
+                    padding: "20px",
+                    border: "2px dashed #d2d5d8",
+                    borderRadius: "8px",
+                    textAlign: "center",
+                    cursor: "pointer",
+                    color: "#2C6ECB",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#2C6ECB"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0f6ff"; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#d2d5d8"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
+                >
+                  + Add Block
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{
+          backgroundColor: "#ffffff",
+          border: "1px solid #e1e3e5",
+          borderRadius: "12px",
+          overflow: "hidden",
+          minHeight: "760px",
+          display: "flex",
+          flexDirection: "column",
+        }}>
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid #e1e3e5" }}>
+            <Text variant="headingSm" as="h3">Block settings</Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {selectedBlock ? "Customize the selected block" : "Select a block from the canvas"}
+            </Text>
+          </div>
+          <div style={{ padding: "12px", overflowY: "auto", flex: 1 }}>
+            {selectedBlock ? (
               <BlockSettings
                 block={selectedBlock}
                 onChange={(updates) => updateBlock(selectedBlock.id, updates)}
@@ -947,9 +1939,7 @@ function BlockEditorStep({
                 isFirst={selectedIndex === 0}
                 isLast={selectedIndex === blocks.length - 1}
               />
-            )}
-
-            {sidebarTab === "settings" && !selectedBlock && (
+            ) : (
               <div style={{ textAlign: "center", padding: "40px 16px", color: "#868e96" }}>
                 <div style={{ fontSize: "32px", marginBottom: "8px" }}>👆</div>
                 <div style={{ fontSize: "13px" }}>Click a block in the canvas to edit it</div>
@@ -957,154 +1947,7 @@ function BlockEditorStep({
             )}
           </div>
         </div>
-
-        {/* CENTER CANVAS */}
-        <div style={{
-          backgroundColor: "#f1f2f4",
-          borderRadius: "0 12px 12px 0",
-          padding: "24px",
-          overflowY: "auto",
-          maxHeight: "700px",
-        }}>
-          <div style={{
-            maxWidth: "800px",
-            margin: "0 auto",
-            backgroundColor: "#fff",
-            borderRadius: "8px",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-            overflow: "hidden",
-          }}>
-            {/* Rendered blocks */}
-            <div style={{ padding: "24px 32px" }}>
-              {blocks.map((block, index) => {
-                const { icon, label } = getBlockMeta(block);
-                const isSelected = selectedBlockId === block.id;
-                const isHovered = hoveredBlockId === block.id;
-                const blockHtml = renderFn ? renderFn(block, renderOpts) : "<div style='padding:16px;color:#868e96;'>Loading...</div>";
-
-                return (
-                  <div key={block.id}>
-                    <div
-                      onClick={(e) => { e.stopPropagation(); addBlock("text", index - 1); }}
-                      style={{
-                        height: "4px",
-                        margin: "0 -8px",
-                        borderRadius: "2px",
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                        position: "relative",
-                      }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "#2C6ECB20"; (e.currentTarget as HTMLElement).style.height = "28px"; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.height = "4px"; }}
-                      title="Click to insert block here"
-                    />
-
-                    <div
-                      onClick={() => selectBlock(block.id)}
-                      onMouseEnter={() => setHoveredBlockId(block.id)}
-                      onMouseLeave={() => setHoveredBlockId(null)}
-                      style={{
-                        position: "relative",
-                        margin: "0 -8px",
-                        padding: "0 8px",
-                        borderRadius: "4px",
-                        outline: isSelected
-                          ? "2px solid #2C6ECB"
-                          : isHovered
-                            ? "2px solid #2C6ECB40"
-                            : "2px solid transparent",
-                        cursor: "pointer",
-                        transition: "outline 0.1s ease",
-                      }}
-                    >
-                      {(isSelected || isHovered) && (
-                        <div style={{
-                          position: "absolute",
-                          top: "-1px",
-                          left: "8px",
-                          transform: "translateY(-100%)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          backgroundColor: isSelected ? "#2C6ECB" : "#2C6ECB99",
-                          color: "#fff",
-                          padding: "2px 8px",
-                          borderRadius: "4px 4px 0 0",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          zIndex: 10,
-                          whiteSpace: "nowrap",
-                        }}>
-                          <span>{icon}</span> {label}
-                        </div>
-                      )}
-
-                      {isSelected && (
-                        <div style={{
-                          position: "absolute",
-                          top: "-1px",
-                          right: "8px",
-                          transform: "translateY(-100%)",
-                          display: "flex",
-                          gap: "2px",
-                          zIndex: 10,
-                        }}>
-                          {[
-                            { label: "↑", action: () => moveBlock(index, "up"), disabled: index === 0 },
-                            { label: "↓", action: () => moveBlock(index, "down"), disabled: index === blocks.length - 1 },
-                            { label: "⧉", action: () => duplicateBlock(index), disabled: false },
-                            { label: "✕", action: () => deleteBlock(block.id), disabled: false },
-                          ].map((btn, i) => (
-                            <button
-                              key={i}
-                              onClick={(e) => { e.stopPropagation(); btn.action(); }}
-                              disabled={btn.disabled}
-                              style={{
-                                padding: "3px 8px",
-                                border: "none",
-                                borderRadius: i === 0 ? "4px 0 0 0" : i === 3 ? "0 4px 0 0" : "0",
-                                cursor: btn.disabled ? "default" : "pointer",
-                                fontSize: "12px",
-                                backgroundColor: btn.label === "✕" ? "#e03131" : "#2C6ECB",
-                                color: "#fff",
-                                opacity: btn.disabled ? 0.4 : 1,
-                              }}
-                            >{btn.label}</button>
-                          ))}
-                        </div>
-                      )}
-
-                      <div
-                        dangerouslySetInnerHTML={{ __html: blockHtml }}
-                        style={{ pointerEvents: "none" }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div
-                onClick={() => addBlock("text")}
-                style={{
-                  margin: "16px 0 24px",
-                  padding: "20px",
-                  border: "2px dashed #d2d5d8",
-                  borderRadius: "8px",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  color: "#2C6ECB",
-                  fontSize: "14px",
-                  fontWeight: 500,
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#2C6ECB"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0f6ff"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = "#d2d5d8"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; }}
-              >
-                + Add Block
-              </div>
-            </div>
-          </div>
-        </div>
+      </div>
       </div>
     </div>
   );
@@ -1703,14 +2546,20 @@ export default function NewAdvertorial() {
   const { products, brandSettings } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const [searchParams] = useSearchParams();
   const isSubmitting = navigation.state === "submitting";
+  const isModal = searchParams.get("modal") === "true";
 
   const [currentStep, setCurrentStep] = useState(0);
   const [templateId, setTemplateId] = useState("");
+  const [isAiPath, setIsAiPath] = useState(false);
+  const [aiIntake, setAiIntake] = useState<AIIntake>({ targetCustomer: "", mechanism: "", proof: "", stylePreset: "", imageUrls: "" });
   const [productId, setProductId] = useState("");
   const [angle, setAngle] = useState<AngleType | "">("");
   const [primaryColor, setPrimaryColor] = useState(brandSettings.primaryColor === "#000000" ? "#22c55e" : brandSettings.primaryColor);
   const [showingPreview, setShowingPreview] = useState(false);
+
+  const selectedProduct = products.find((p) => p.id === productId);
 
   const [previewData, setPreviewData] = useState<{
     productId: string;
@@ -1725,20 +2574,31 @@ export default function NewAdvertorial() {
   } | null>(null);
 
   useEffect(() => {
-    if (actionData?.step === "preview" && actionData.html && actionData.blocks) {
+    const data = actionData as any;
+    if (data?.step === "preview" && data.html && data.blocks) {
       setPreviewData({
-        productId: actionData.productId,
-        productTitle: actionData.productTitle,
-        productHandle: actionData.productHandle,
-        title: actionData.title,
-        html: actionData.html,
-        blocks: actionData.blocks,
-        primaryColor: actionData.primaryColor || "#22c55e",
-        angle: actionData.angle || "Desire",
-        templateName: actionData.templateName || "Template",
+        productId: data.productId,
+        productTitle: data.productTitle,
+        productHandle: data.productHandle,
+        title: data.title,
+        html: data.html,
+        blocks: data.blocks,
+        primaryColor: data.primaryColor || "#22c55e",
+        angle: data.angle || "Desire",
+        templateName: data.templateName || "Template",
       });
       setShowingPreview(true);
       setCurrentStep(4);
+    }
+  }, [actionData]);
+
+  useEffect(() => {
+    const data = actionData as any;
+    if (data?.step === "wizardDone" && data.advertorialId) {
+      window.opener?.postMessage(
+        { type: "WIZARD_DONE", id: data.advertorialId },
+        window.location.origin,
+      );
     }
   }, [actionData]);
 
@@ -1746,7 +2606,7 @@ export default function NewAdvertorial() {
     switch (currentStep) {
       case 0: return !!templateId;
       case 1: return !!productId;
-      case 2: return !!angle;
+      case 2: return isAiPath ? (!!aiIntake.targetCustomer.trim() && !!aiIntake.mechanism.trim() && !!aiIntake.proof.trim() && !!aiIntake.stylePreset) : !!angle;
       case 3: return true;
       default: return false;
     }
@@ -1759,23 +2619,36 @@ export default function NewAdvertorial() {
   };
 
   const handleBack = () => {
-    if (currentStep === 4) {
+    if (showingPreview) {
       setShowingPreview(false);
-      setCurrentStep(3);
+      setCurrentStep(isAiPath ? 2 : 3);
     } else {
       setCurrentStep((s) => Math.max(s - 1, 0));
     }
   };
 
-  if (showingPreview && previewData) {
-    const publishError = actionData?.step === "publish" && actionData?.error ? actionData.error : undefined;
+  const wizardContent = (
+    <div style={showingPreview ? styles.editorWizard : styles.wizard}>
+      <ProgressBar currentStep={showingPreview ? 4 : currentStep} />
 
-    return (
-      <Page>
-        <TitleBar title="Create Advertorial" />
-        <div style={styles.wizard}>
-          <ProgressBar currentStep={4} />
+      {(actionData as any)?.error && ((actionData as any)?.step === "generate" || (actionData as any)?.step === "ai-generate" || (actionData as any)?.step === "publish") && (
+        <div style={{ marginBottom: "16px" }}>
+          <Banner tone="critical" title="Error">{(actionData as any).error}</Banner>
+        </div>
+      )}
 
+      {isSubmitting && isAiPath && currentStep === 2 && (
+        <div style={{ marginBottom: "16px", padding: "14px 18px", backgroundColor: "#f0f6ff", border: "1px solid #c8deff", borderRadius: "10px", display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ fontSize: "18px" }}>✨</div>
+          <div>
+            <Text variant="bodyMd" fontWeight="semibold" as="p">AI is writing your advertorial…</Text>
+            <Text variant="bodySm" tone="subdued" as="p">Writing the full 17-section DR page. Usually takes 20–40 seconds.</Text>
+          </div>
+        </div>
+      )}
+
+      {showingPreview && previewData ? (
+        <>
           <BlockEditorStep
             title={previewData.title}
             blocks={previewData.blocks}
@@ -1783,15 +2656,159 @@ export default function NewAdvertorial() {
             productHandle={previewData.productHandle}
             primaryColor={previewData.primaryColor}
             isSubmitting={isSubmitting}
-            error={publishError}
+            error={undefined}
             previewData={previewData}
+            onClose={handleBack}
+            isModal={isModal}
+            brandFonts={{
+              headerFont: brandSettings.headerFont,
+              bodyFont: brandSettings.bodyFont,
+            }}
           />
-
           <div style={styles.navBar}>
             <Button onClick={handleBack}>Back</Button>
             <div />
           </div>
+        </>
+      ) : (
+        <>
+          {currentStep === 0 && (
+            <TemplateStep
+              selected={templateId}
+              onSelect={(id) => {
+                setTemplateId(id);
+                setIsAiPath(id === "ai-generate");
+              }}
+            />
+          )}
+          {currentStep === 1 && (
+            <ProductStep
+              products={products}
+              selected={productId}
+              onSelect={(id) => setProductId(id)}
+            />
+          )}
+          {currentStep === 2 && !isAiPath && (
+            <AngleStep
+              selected={angle}
+              onSelect={(a) => setAngle(a)}
+            />
+          )}
+          {currentStep === 2 && isAiPath && (
+            <AIIntakeStep
+              selectedProductTitle={selectedProduct?.title || ""}
+              aiIntake={aiIntake}
+              onChange={(updates) => setAiIntake((prev) => ({ ...prev, ...updates }))}
+            />
+          )}
+          {currentStep === 3 && (
+            <BrandStep
+              primaryColor={primaryColor}
+              onPrimaryChange={setPrimaryColor}
+            />
+          )}
+
+          <div style={styles.navBar}>
+            <div>
+              {currentStep > 0 ? (
+                <Button onClick={handleBack}>Back</Button>
+              ) : isModal ? (
+                <Button
+                  variant="plain"
+                  onClick={() =>
+                    window.opener?.postMessage(
+                      { type: "WIZARD_CLOSE" },
+                      window.location.origin,
+                    )
+                  }
+                >
+                  Cancel
+                </Button>
+              ) : (
+                <Button url="/app" variant="plain">Cancel</Button>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <Text variant="bodySm" tone="subdued" as="span">
+                Step {currentStep + 1} of {STEPS.length}
+              </Text>
+
+              {isAiPath && currentStep === 2 ? (
+                <Form method="post">
+                  <input type="hidden" name="step" value="ai-generate" />
+                  <input type="hidden" name="productId" value={productId} />
+                  <input type="hidden" name="productTitle" value={selectedProduct?.title || ""} />
+                  <input type="hidden" name="productHandle" value={selectedProduct?.handle || ""} />
+                  <input type="hidden" name="productDescription" value={selectedProduct?.description || ""} />
+                  <input type="hidden" name="primaryColor" value={primaryColor} />
+                  <input type="hidden" name="targetCustomer" value={aiIntake.targetCustomer} />
+                  <input type="hidden" name="mechanism" value={aiIntake.mechanism} />
+                  <input type="hidden" name="proof" value={aiIntake.proof} />
+                  <input type="hidden" name="stylePreset" value={aiIntake.stylePreset} />
+                  <input type="hidden" name="imageUrls" value={aiIntake.imageUrls} />
+                  {isModal && <input type="hidden" name="modal" value="true" />}
+                  <Button
+                    submit
+                    variant="primary"
+                    loading={isSubmitting}
+                    disabled={!canContinue()}
+                  >
+                    Generate with AI ✨
+                  </Button>
+                </Form>
+              ) : currentStep < 3 ? (
+                <Button
+                  variant="primary"
+                  onClick={handleContinue}
+                  disabled={!canContinue()}
+                >
+                  Continue
+                </Button>
+              ) : (
+                <Form method="post">
+                  <input type="hidden" name="step" value="generate" />
+                  <input type="hidden" name="templateId" value={templateId} />
+                  <input type="hidden" name="productId" value={productId} />
+                  <input type="hidden" name="angle" value={angle} />
+                  <input type="hidden" name="primaryColor" value={primaryColor} />
+                  {isModal && <input type="hidden" name="modal" value="true" />}
+                  <Button
+                    submit
+                    variant="primary"
+                    loading={isSubmitting}
+                    disabled={!productId || !angle || !templateId}
+                  >
+                    Create Advertorial
+                  </Button>
+                </Form>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  if (isModal) {
+    return (
+      <>
+        <TitleBar title="Create Advertorial" />
+        <div style={{
+          minHeight: "100vh",
+          backgroundColor: "#f6f6f7",
+          padding: "24px 24px 48px",
+        }}>
+          {wizardContent}
         </div>
+      </>
+    );
+  }
+
+  if (showingPreview && previewData) {
+    return (
+      <Page fullWidth>
+        <TitleBar title="Create Advertorial" />
+        {wizardContent}
       </Page>
     );
   }
@@ -1799,89 +2816,7 @@ export default function NewAdvertorial() {
   return (
     <Page>
       <TitleBar title="Create Advertorial" />
-      <div style={styles.wizard}>
-        <ProgressBar currentStep={currentStep} />
-
-        {actionData?.error && actionData?.step === "generate" && (
-          <div style={{ marginBottom: "16px" }}>
-            <Banner tone="critical" title="Error">{actionData.error}</Banner>
-          </div>
-        )}
-
-        {/* Step 1: Template */}
-        {currentStep === 0 && (
-          <TemplateStep
-            selected={templateId}
-            onSelect={(id) => setTemplateId(id)}
-          />
-        )}
-
-        {/* Step 2: Product */}
-        {currentStep === 1 && (
-          <ProductStep
-            products={products}
-            selected={productId}
-            onSelect={(id) => setProductId(id)}
-          />
-        )}
-
-        {/* Step 3: Angle */}
-        {currentStep === 2 && (
-          <AngleStep
-            selected={angle}
-            onSelect={(a) => setAngle(a)}
-          />
-        )}
-
-        {/* Step 4: Brand */}
-        {currentStep === 3 && (
-          <BrandStep
-            primaryColor={primaryColor}
-            onPrimaryChange={setPrimaryColor}
-          />
-        )}
-
-        <div style={styles.navBar}>
-          <div>
-            {currentStep > 0 ? (
-              <Button onClick={handleBack}>Back</Button>
-            ) : (
-              <Button url="/app" variant="plain">Cancel</Button>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <Text variant="bodySm" tone="subdued">
-              Step {currentStep + 1} of {STEPS.length}
-            </Text>
-
-            {currentStep < 3 ? (
-              <Button
-                variant="primary"
-                onClick={handleContinue}
-                disabled={!canContinue()}
-              >
-                Continue
-              </Button>
-            ) : (
-              <Form method="post">
-                <input type="hidden" name="step" value="generate" />
-                <input type="hidden" name="templateId" value={templateId} />
-                <input type="hidden" name="productId" value={productId} />
-                <input type="hidden" name="angle" value={angle} />
-                <input type="hidden" name="primaryColor" value={primaryColor} />
-                <Button
-                  submit
-                  variant="primary"
-                  loading={isSubmitting}
-                  disabled={!productId || !angle || !templateId}
-                >
-                  Create Advertorial
-                </Button>
-              </Form>
-            )}
-          </div>
-        </div>
-      </div>
+      {wizardContent}
     </Page>
   );
 }

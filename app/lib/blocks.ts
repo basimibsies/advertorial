@@ -185,6 +185,31 @@ export interface DisclaimerBlock {
   text: string;
 }
 
+export interface UrgencyBannerBlock {
+  type: "urgencyBanner";
+  id: string;
+  text: string;
+  style?: "breaking" | "limited" | "trending";
+}
+
+export interface PricingTiersBlock {
+  type: "pricingTiers";
+  id: string;
+  heading?: string;
+  productHandle: string;
+  tiers: {
+    name: string;
+    originalPrice: string;
+    salePrice: string;
+    perUnit?: string;
+    tag?: string;
+    features: string[];
+    highlight?: boolean;
+  }[];
+  ctaText?: string;
+  guarantee?: string;
+}
+
 // ─── Union Type ───────────────────────────────────────────────────────────────
 
 export type Block =
@@ -208,7 +233,9 @@ export type Block =
   | FeatureListBlock
   | OfferBoxBlock
   | CommentsBlock
-  | DisclaimerBlock;
+  | DisclaimerBlock
+  | UrgencyBannerBlock
+  | PricingTiersBlock;
 
 export type BlockType = Block["type"];
 
@@ -243,6 +270,8 @@ export const BLOCK_CATALOG: BlockCatalogEntry[] = [
   { type: "offerBox", label: "Offer Box", description: "Product offer with discount & guarantee", icon: "🎁" },
   { type: "comments", label: "Comments", description: "Social proof comment thread", icon: "💬" },
   { type: "disclaimer", label: "Disclaimer", description: "Advertorial disclosure footer", icon: "⚖️" },
+  { type: "urgencyBanner", label: "Urgency Banner", description: "Sticky top bar with time-sensitive message", icon: "🔴" },
+  { type: "pricingTiers", label: "Pricing Tiers", description: "3-tier product pricing (Single / Bundle / Best Value)", icon: "💰" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -301,5 +330,20 @@ export function createEmptyBlock(type: BlockType): Block {
       return { type, id, comments: [{ name: "Customer Name", text: "Great product! Really made a difference.", likes: "43", timeAgo: "2 days ago", isVerified: true }] };
     case "disclaimer":
       return { type, id, text: "THIS IS AN ADVERTISEMENT AND NOT AN ACTUAL NEWS ARTICLE, BLOG, OR CONSUMER PROTECTION UPDATE. MARKETING DISCLOSURE: This website is a marketplace. The owner has a monetary connection to the products and services advertised on the site." };
+    case "urgencyBanner":
+      return { type, id, text: "TRENDING: Thousands of customers discovered this week — stock is running low", style: "trending" };
+    case "pricingTiers":
+      return {
+        type, id,
+        heading: "Choose Your Package",
+        productHandle: "product",
+        tiers: [
+          { name: "Starter", originalPrice: "$79", salePrice: "$49", perUnit: "$49 per unit", tag: undefined, features: ["Free shipping", "30-day guarantee"], highlight: false },
+          { name: "Most Popular", originalPrice: "$177", salePrice: "$99", perUnit: "$33/unit — Save $78", tag: "MOST POPULAR", features: ["Free shipping", "60-day guarantee", "Best seller"], highlight: true },
+          { name: "Best Value", originalPrice: "$294", salePrice: "$147", perUnit: "$24.50/unit — Save $147", tag: "BEST VALUE", features: ["Free shipping", "90-day guarantee", "Lowest price per unit"], highlight: false },
+        ],
+        ctaText: "Get My Order",
+        guarantee: "60-Day Money-Back Guarantee — No Questions Asked",
+      };
   }
 }

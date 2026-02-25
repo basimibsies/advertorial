@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
+import { Link, Outlet, useLoaderData, useRouteError, useSearchParams } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
@@ -17,19 +17,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
+  const isModal = searchParams.get("modal") === "true";
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      <NavMenu>
-        <Link to="/app" rel="home">
-          Advertorials
-        </Link>
-        <Link to="/app/campaigns">Campaigns</Link>
-        <Link to="/app/experiments">Experiments</Link>
-        <Link to="/app/analytics">Analytics</Link>
-        <Link to="/app/integrations">Integrations</Link>
-        <Link to="/app/settings">Settings</Link>
-      </NavMenu>
+      {!isModal && (
+        <NavMenu>
+          <Link to="/app" rel="home">
+            Advertorials
+          </Link>
+          <Link to="/app/campaigns">Campaigns</Link>
+          <Link to="/app/experiments">Experiments</Link>
+          <Link to="/app/analytics">Analytics</Link>
+          <Link to="/app/integrations">Integrations</Link>
+          <Link to="/app/settings">Settings</Link>
+        </NavMenu>
+      )}
       <Outlet />
     </AppProvider>
   );
