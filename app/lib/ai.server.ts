@@ -60,12 +60,108 @@ divider: { type, id }
 note: { type, id, text, style: "info"|"warning"|"highlight" }
 `;
 
+// ─── Template Structures ──────────────────────────────────────────────────────
+
+const TEMPLATE_STRUCTURES: Record<string, string> = {
+  editorial: `BLOCK STRUCTURE — follow this order exactly (14–15 blocks):
+1.  headline (size: "large") — editorial article headline. Reads like a real article, not an ad.
+2.  authorByline — writer name matching the style preset authority. Include publicationName.
+3.  image — hero image (height: "400px"). Use a real image URL if provided, otherwise label/hint only.
+4.  text (variant: "large-intro") — opening hook paragraph. 2nd-person, draws the reader in.
+5.  headline (size: "medium") — first section heading (the problem or angle)
+6.  text — first section body (2 short paragraphs). Address the core pain/desire/comparison.
+7.  image — supporting image (height: "320px"). Label and hint relevant to the section.
+8.  headline (size: "medium") — second section heading (the solution/product reveal)
+9.  text — second section body. Name the product, explain what makes it different.
+10. testimonials (showStars: true, layout: "grid") — exactly 3 customer quotes with full names.
+11. headline (size: "medium") — conclusion/verdict heading
+12. text — short conclusion paragraph. Reassure the reader, mention the guarantee.
+13. offerBox — CTA. Include headline, subtext, buttonText, guarantee.
+14. faq — 3–4 frequently asked questions with real, specific answers.
+15. disclaimer — required legal/advertorial disclosure.`,
+
+  "personal-story": `BLOCK STRUCTURE — follow this order exactly (15–16 blocks):
+1.  headline (size: "large") — emotional, first-person headline with <mark> highlight on a key phrase.
+2.  authorByline — the narrator. Use viewCount and liveViewers for social proof.
+3.  image — hero product/lifestyle image (height: "400px").
+4.  text (variant: "large-intro") — opening hook in first-person voice. Sets the scene of the struggle.
+5.  note (style: "highlight") — short relatable callout: "If any of this sounds familiar, keep reading."
+6.  text — problem body. Make it specific and relatable. 3–4 short paragraphs max.
+7.  headline (size: "medium") — the turning point / discovery heading
+8.  text — the discovery/product reveal in first-person. Skepticism → surprise at results.
+9.  image — product detail image (height: "300px").
+10. testimonials (showStars: true, layout: "stacked") — exactly 3 quotes. Each starts with skepticism then confirms results.
+11. offerBox — first CTA (headline, subtext, buttonText, guarantee).
+12. headline (size: "medium") — risk-reversal heading ("Your Only Risk Is Not Trying")
+13. text — guarantee + reassurance paragraph. Personal and warm.
+14. offerBox — second CTA with urgency field.
+15. comments (5–6 comments) — authentic-sounding community comments with likes.
+16. disclaimer — required disclosure.`,
+
+  listicle: `BLOCK STRUCTURE — follow this order exactly (13–14 blocks):
+1.  authorByline — editorial team, with viewCount and liveViewers.
+2.  headline (size: "large") — "5 Reasons..." format, with subheadline showing date.
+3.  socialProof — real-feeling rating (4.8 or 4.9), review count, customer count.
+4.  text (variant: "large-intro") — 1-sentence intro for the listicle. Angle-specific.
+5.  cta (style: "inline") — early "Check Availability →" button.
+6.  numberedSection (number: "01") — Reason One. Specific headline + 2-paragraph body.
+7.  numberedSection (number: "02") — Reason Two.
+8.  numberedSection (number: "03") — Reason Three.
+9.  numberedSection (number: "04") — Reason Four.
+10. numberedSection (number: "05") — Reason Five.
+11. testimonials (showStars: true, layout: "grid") — 3 customer quotes.
+12. offerBox — CTA with discount badge and guarantee.
+13. featureList — "What's Included" with 4–5 bullet points.
+14. disclaimer.`,
+
+  "research-report": `BLOCK STRUCTURE — follow this order exactly (13–14 blocks):
+1.  authorByline — researcher/editor with academic authority. Include publicationName.
+2.  headline (size: "large") — data-driven headline with subheadline showing date and "Independent analysis".
+3.  asSeenIn — 4–5 well-known publications (Forbes, Healthline, etc.).
+4.  stats (layout: "grid") — exactly 4 data points with specific numbers.
+5.  text (variant: "large-intro") — research framing intro. Clinical but accessible.
+6.  cta (style: "inline") — "View Research & Check Availability".
+7.  comparison — product vs alternatives table. 5–6 rows. Product wins all.
+8.  numberedSection (number: "01", label: "Finding One") — first key finding with study-style data.
+9.  numberedSection (number: "02", label: "Finding Two") — second key finding.
+10. numberedSection (number: "03", label: "Finding Three") — third key finding.
+11. testimonials (showStars: true, layout: "grid") — 3 quotes from credible-sounding people.
+12. featureList — what makes it different (science-focused).
+13. offerBox — evidence-based CTA.
+14. disclaimer.`,
+
+  "before-after": `BLOCK STRUCTURE — follow this order exactly (13–14 blocks):
+1.  authorByline — personal narrator (real name, "Contributing Writer"). Include viewCount.
+2.  headline (size: "large") — transformation headline in first-person or close 3rd.
+3.  text (variant: "large-intro") — opening hook. The struggle before. Vivid, specific.
+4.  note (style: "highlight") — empathetic callout for the reader.
+5.  image — product hero (height: "340px", rounded: true).
+6.  timeline — 3 steps (Week 1, Week 2, Month 1). Specific, observable milestones.
+7.  socialProof — high rating, review count, customer count.
+8.  testimonials (showStars: true, layout: "stacked") — 2 detailed transformation stories.
+9.  stats (layout: "horizontal") — 3 impressive data points.
+10. offerBox — transformation-focused CTA with guarantee and urgency.
+11. guarantee — money-back badges (4 badges: shield, lock, truck, star).
+12. faq — 3 questions addressing hesitations.
+13. comments — 3–4 real-feeling comments from the community.
+14. disclaimer.`,
+};
+
+const ANGLE_GUIDANCE: Record<string, string> = {
+  Pain: `ANGLE — Pain Point: The reader is frustrated. They've tried things that didn't work. Lead with the problem — make them feel understood. Then position this product as the solution others missed because they didn't address the root cause.`,
+  Desire: `ANGLE — Aspiration: The reader wants an upgrade. They're not broken — they want better. Paint a picture of the ideal outcome, make them feel it's attainable, then present this product as the clear path to get there.`,
+  Comparison: `ANGLE — Comparison: The reader is evaluating options. They're research-minded. Show why the alternatives fall short, present clear differentiators, and help them feel confident they're making the smart choice.`,
+};
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function generateBlocksWithAI(params: {
   productTitle: string;
   productHandle: string;
   productDescription?: string;
+  // Template + angle (for template-aware generation)
+  templateId?: string;
+  angle?: string;
   // Structured intake fields (preferred)
   targetCustomer?: string;
   mechanism?: string;
@@ -85,39 +181,40 @@ export async function generateBlocksWithAI(params: {
 
   const preset = STYLE_PRESETS[params.stylePreset || "A"];
 
-  const systemPrompt = `You are an expert direct-response advertorial copywriter. You write presell pages that sit between a Meta ad and a Shopify product page — they look like editorial content but are engineered to sell. Every page you produce should read like a real magazine article or editorial piece while following proven direct-response structure.
+  const templateStructure = params.templateId ? TEMPLATE_STRUCTURES[params.templateId] : null;
+  const angleGuidance = params.angle ? (ANGLE_GUIDANCE[params.angle] || "") : "";
+
+  const structureSection = templateStructure
+    ? `${templateStructure}\n\n${angleGuidance}`
+    : `MANDATORY DR PAGE STRUCTURE — follow this order exactly, generating one block per section:
+1.  authorByline — realistic author matching the style preset's authority type. Use the publicationName field.
+2.  headline (large) — reads like a real article headline, NEVER an ad. Follow this pattern: ${preset.headlinePattern}
+3.  socialProof — real numbers from the proof provided (star rating + review count + customer count)
+4.  text (large-intro variant) — opening hook: 2nd-person, relatable scenario. Reader should think "that's me."
+5.  text — pain point or desire escalation: deepen the emotional pull. Show what's at stake.
+6.  text — root cause reframe: "Here's what most people don't realize..." — introduce the mechanism as the real explanation.
+7.  image — product hero image
+8.  text — product reveal: NOW name it. Frame as the solution to the root cause.
+9.  featureList — 3–5 key differentiators. Every item must have a specific number or claim.
+10. testimonials (showStars: true) — 3 customer stories with full name + detail, each starting with skepticism.
+11. offerBox — CTA with headline, subtext, buttonText, guarantee, and urgency.
+12. faq — 3 questions addressing the most common hesitations.
+13. disclaimer — appropriate for the product category.`;
+
+  const systemPrompt = `You are an expert advertorial copywriter. You write presell pages that look like editorial content — real articles that happen to recommend a product. Every page should be readable, credible, and naturally lead the reader toward a purchase decision.
 
 ${BLOCK_SCHEMA}
 
-MANDATORY DR PAGE STRUCTURE — follow this order exactly, generating one block per section:
-1.  urgencyBanner — sticky top bar with a time-sensitive, specific message. NOT generic "hurry" — tie it to something real: a media feature, a production run, a seasonal surge. Example: "TRENDING: 47,283 people discovered this in the last 30 days — stock is running low"
-2.  authorByline — realistic author matching the style preset's authority type. Use the publicationName field.
-3.  headline (large) — reads like a real article headline, NEVER an ad. Follow this pattern: ${preset.headlinePattern}
-4.  socialProof — real numbers from the proof provided (star rating + review count + customer count)
-5.  text (large-intro variant) — opening hook: 2nd-person, relatable pain scenario. Reader should think "that's me." End by TEASING the solution without naming the product yet.
-6.  text — pain point escalation: take the initial pain and make it worse. Show the cascade of consequences. Make the reader feel this is serious enough to solve NOW.
-7.  text — root cause reframe: "Here's what most people don't realize..." — introduce the mechanism/unique angle as the REAL explanation. Position existing solutions as flawed because they don't address the root cause. Create an information gap only this product fills.
-8.  image — product hero image
-9.  text — product reveal: NOW name it. Frame as the solution to the root cause. Brief origin story ("After X years of research, [brand] developed..."). This is the payoff.
-10. featureList — 3–5 key ingredients or differentiators. Every item must have a specific number: "clinically shown to improve X by 47% in 4 weeks", "3× more bioavailable than standard formulas"
-11. stats — 3 specific data points from the proof provided. Use real numbers.
-12. testimonials (showStars: true) — 3 customer stories. EACH MUST: include full name + age/city, start with hesitation or skepticism, include a specific timeframe, mention a specific observable result. NOT "this product is amazing" — "I almost didn't order because I'd already tried 3 others. After 2 weeks I noticed my [specific symptom] was actually better."
-13. timeline — week-by-week expected results (Week 1, Week 4, Week 8). Specific, observable, believable. Sets expectations and creates anticipation.
-14. comparison — product vs. competitors/traditional alternatives. Product wins every row. Include price-per-day framing in one row.
-15. pricingTiers — 3-tier offer: 1 unit (starter), 3 units (MOST POPULAR, highlight: true), 6 units (BEST VALUE). Use real math for per-unit savings. Include product handle.
-16. guarantee — 60-day money-back guarantee. Brief, reassuring. Remove risk.
-17. disclaimer — FDA disclaimer or results disclaimer appropriate for the product category.
+${structureSection}
 
-COPY RULES — these separate a converting advertorial from generic AI slop:
-- Write like a JOURNALIST, not a marketer. The reader should be 80% through the page before they realize they're being sold to. Every paragraph earns the next scroll.
-- SPECIFIC > GENERIC: "47,382 women" beats "thousands of women". "In 14 days" beats "quickly". "$3.27/day" beats "affordable". Never round numbers.
-- One idea per paragraph. Short paragraphs. Lots of white space. Scannable.
-- BANNED WORDS — never use: delve, landscape, testament, showcase, foster, underscore, pivotal, crucial, realm, myriad, tapestry, multifaceted, commendable, intricate, comprehensive, game-changer, revolutionize, holistic, synergy, seamless, cutting-edge, robust, streamline
-- No hype adjectives without proof. Don't call it "amazing" — show a 4.8-star rating from 12,400 reviews and let the reader decide.
-- The mechanism is the STAR. Devote real space to explaining it. Use analogies. Make the reader feel smarter for understanding it. This is what separates your page from every other advertorial.
-- Urgency must feel REAL — never just "limited time". Tie it to: a seasonal sale, a media feature driving demand, a specific production batch size.
+COPY RULES:
+- Write like a JOURNALIST, not a marketer. Every paragraph earns the next scroll.
+- SPECIFIC > GENERIC: "47,382 women" beats "thousands of women". "In 14 days" beats "quickly".
+- One idea per paragraph. Short paragraphs. Scannable on mobile.
+- BANNED WORDS: delve, landscape, testament, showcase, foster, underscore, pivotal, crucial, realm, myriad, tapestry, multifaceted, commendable, intricate, comprehensive, game-changer, revolutionize, holistic, synergy, seamless, cutting-edge, robust, streamline
+- No hype without proof. Don't call it "amazing" — show the 4.8-star rating and let the reader decide.
+- The mechanism is the STAR. Explain it clearly. Make the reader feel smarter for understanding it.
 - NEVER use placeholder text like [Author Name], [X]%, [City], [Product Name]. Write real, specific copy.
-- EVERY block must feel earned — if it doesn't push the reader toward the next block or the purchase, cut it.
 
 Style preset: ${preset.name}
 Tone: ${preset.tone}
@@ -125,7 +222,7 @@ Authority figure: ${preset.authority}
 
 OUTPUT RULES:
 1. Return ONLY a valid JSON array — no markdown code fences, no explanation, nothing else.
-2. Generate exactly 15–18 blocks following the DR structure above. Do not exceed 18.
+2. Follow the block structure above exactly. Do not add extra blocks or skip blocks.
 3. Every block MUST have a unique "id" in format "blk_" + 8 random alphanumeric chars.`;
 
   // Build the user message from structured intake or legacy prompt
@@ -133,12 +230,13 @@ OUTPUT RULES:
   if (params.productDescription) parts.push(`Description: ${params.productDescription}`);
   if (params.targetCustomer) parts.push(`Target customer: ${params.targetCustomer}`);
   if (params.mechanism) parts.push(`Mechanism / unique angle: ${params.mechanism}`);
-  if (params.proof) parts.push(`Proof: ${params.proof}`);
+  if (params.proof) parts.push(`Proof / social proof: ${params.proof}`);
   if (params.stylePreset) parts.push(`Style preset: ${params.stylePreset} — ${preset.name}`);
-  if (params.imageUrls?.length) parts.push(`Product image URLs:\n${params.imageUrls.join("\n")}`);
+  if (params.imageUrls?.length) parts.push(`Product image URLs (use the first as the hero image src):\n${params.imageUrls.join("\n")}`);
   if (params.userPrompt) parts.push(`Additional instructions: ${params.userPrompt}`);
-  parts.push(`Product handle (use in pricingTiers.productHandle): ${params.productHandle}`);
-  parts.push(`\nGenerate a complete advertorial following the 17-section DR structure. Return only a JSON array of blocks.`);
+  parts.push(`Product handle (for CTA links and offerBox): ${params.productHandle}`);
+  const blockCount = templateStructure ? "exactly as specified in the block structure" : "13 blocks";
+  parts.push(`\nGenerate the advertorial (${blockCount}). Return only a JSON array of blocks.`);
 
   const userMessage = parts.join("\n");
 

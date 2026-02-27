@@ -33,14 +33,14 @@ const IMG_SVG = `<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xml
 // ─── Individual Block Renderers ───────────────────────────────────────────────
 
 function renderHeadline(block: Extract<Block, { type: "headline" }>, _primaryColor: string): string {
-  const sizes = { large: "2.6rem", medium: "2rem", small: "1.55rem" };
+  const sizes = { large: "2.4em", medium: "1.85em", small: "1.4em" };
   const weights = { large: "900", medium: "800", small: "700" };
-  const lh = { large: "1.15", medium: "1.2", small: "1.25" };
+  const lh = { large: "1.15", medium: "1.2", small: "1.3" };
   const tags = { large: "h1", medium: "h2", small: "h3" };
   const tag = tags[block.size];
   const align = block.align || "left";
   const subheadline = block.subheadline
-    ? `<p style="font-size:${block.size === "large" ? "1.15rem" : "1rem"};color:#6b7280;font-weight:400;margin:10px 0 0;line-height:1.55;">${block.subheadline}</p>`
+    ? `<p style="font-size:${block.size === "large" ? "1.1em" : "0.95em"};color:#6b7280;font-weight:400;margin:10px 0 0;line-height:1.55;">${block.subheadline}</p>`
     : "";
   return `<div style="text-align:${align};margin:0 0 24px;">
   <${tag} style="font-size:${sizes[block.size]};font-weight:${weights[block.size]};margin:0;font-family:inherit;line-height:${lh[block.size]};color:#111827;letter-spacing:-0.02em;">${block.text}</${tag}>
@@ -52,23 +52,23 @@ function renderText(block: Extract<Block, { type: "text" }>, primaryColor: strin
   const variant = block.variant || "default";
   if (variant === "large-intro") {
     return `<div style="margin:24px 0;">
-  <p style="font-size:1.3rem;line-height:1.8;margin:0;color:#111827;font-weight:400;">${block.content}</p>
+  <p style="font-size:1.15em;line-height:1.8;margin:0;color:#111827;font-weight:400;">${block.content}</p>
 </div>`;
   }
   if (variant === "pull-quote") {
     return `<blockquote style="margin:36px 0;padding:20px 28px;border-left:4px solid ${primaryColor};background:${hexToRgba(primaryColor, 0.05)};border-radius:0 10px 10px 0;">
-  <p style="font-size:1.35rem;line-height:1.7;margin:0;color:#1f2937;font-style:italic;font-weight:500;">${block.content}</p>
+  <p style="font-size:1.2em;line-height:1.7;margin:0;color:#1f2937;font-style:italic;font-weight:500;">${block.content}</p>
 </blockquote>`;
   }
-  return `<div style="margin:24px 0;">
-  <p style="font-size:1.15rem;line-height:1.85;margin:0;color:#374151;">${block.content}</p>
+  return `<div style="margin:20px 0;">
+  <p style="font-size:1em;line-height:1.85;margin:0;color:#374151;">${block.content}</p>
 </div>`;
 }
 
 function renderImage(block: Extract<Block, { type: "image" }>, _primaryColor: string): string {
   const isSidebar = block.placement === "sidebar";
   const margin = isSidebar ? "16px 0" : "28px 0";
-  const height = block.height || (isSidebar ? "180px" : "300px");
+  const height = block.height || (isSidebar ? "200px" : "320px");
   const radius = block.rounded === false ? "0" : (isSidebar ? "8px" : "12px");
   const caption = block.caption
     ? `<figcaption style="margin-top:10px;font-size:0.875rem;color:#9ca3af;text-align:center;font-style:italic;">${block.caption}</figcaption>`
@@ -80,10 +80,10 @@ function renderImage(block: Extract<Block, { type: "image" }>, _primaryColor: st
 </figure>`;
   }
   return `<figure style="margin:${margin};padding:0;">
-  <div class="adv-img-placeholder" style="width:100%;height:${height};background:linear-gradient(150deg,#f1f5f9 0%,#e2e8f0 100%);border-radius:${radius};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+  <div class="adv-img-placeholder" style="width:100%;height:${height};background:#f8fafc;border-radius:${radius};border:2px dashed #cbd5e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
     ${IMG_SVG}
-    <span style="font-size:13px;font-weight:600;color:#94a3b8;text-align:center;max-width:80%;line-height:1.4;">${block.label}</span>
-    <span style="font-size:11px;color:#cbd5e1;text-align:center;max-width:80%;line-height:1.4;">${block.hint}</span>
+    <span style="font-size:14px;font-weight:600;color:#94a3b8;text-align:center;max-width:80%;line-height:1.4;">${block.label}</span>
+    <span style="font-size:12px;color:#cbd5e1;text-align:center;max-width:80%;line-height:1.4;">${block.hint}</span>
   </div>
   ${caption}
 </figure>`;
@@ -194,8 +194,8 @@ function renderNumberedSection(block: Extract<Block, { type: "numberedSection" }
       <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:${primaryColor};">${block.label}</div>
     </div>
   </div>
-  <h3 class="adv-numbered-headline" style="font-size:1.75rem;font-weight:800;margin:0 0 12px;font-family:inherit;line-height:1.25;color:#111827;">${block.headline}</h3>
-  <p style="font-size:1.1rem;line-height:1.8;color:#4b5563;margin:0;">${block.body}</p>
+  <h3 class="adv-numbered-headline" style="font-size:1.55em;font-weight:800;margin:0 0 12px;font-family:inherit;line-height:1.25;color:#111827;">${block.headline}</h3>
+  <p style="font-size:1em;line-height:1.8;color:#4b5563;margin:0;">${block.body}</p>
   ${imageHtml}
 </div>`;
 }
@@ -321,7 +321,7 @@ function renderFaq(block: Extract<Block, { type: "faq" }>, primaryColor: string)
       ${item.question}
       <span style="font-size:18px;color:${primaryColor};flex-shrink:0;margin-left:12px;font-weight:400;">+</span>
     </summary>
-    <div style="padding:0 22px 18px;font-size:1rem;color:#4b5563;line-height:1.75;background:#fff;border-top:1px solid #f3f4f6;">
+    <div style="padding:0 22px 18px;font-size:16px;color:#4b5563;line-height:1.75;background:#fff;border-top:1px solid #f3f4f6;">
       ${item.answer}
     </div>
   </details>
@@ -444,10 +444,9 @@ function renderUrgencyBanner(block: Extract<Block, { type: "urgencyBanner" }>, p
     : block.style === "limited" ? "⚡ LIMITED:"
     : "📈 TRENDING:";
   const text = block.text.replace(/^(BREAKING:|LIMITED:|TRENDING:)\s*/i, "");
-  return `<div class="adv-urgency-banner" style="position:fixed;top:0;left:0;right:0;z-index:1000;background:${bg};color:#fff;text-align:center;padding:10px 20px;font-size:0.8rem;font-weight:700;letter-spacing:0.04em;line-height:1.4;">
+  return `<div class="adv-urgency-banner" style="position:sticky;top:0;z-index:100;background:${bg};color:#fff;text-align:center;padding:10px 20px;font-size:0.8rem;font-weight:700;letter-spacing:0.04em;line-height:1.4;margin:-32px -24px 32px;">
   <span style="opacity:0.9">${prefix}</span> ${text}
-</div>
-<div style="height:44px;"></div>`;
+</div>`;
 }
 
 // ─── Pricing Tiers ────────────────────────────────────────────────────────────
@@ -554,29 +553,29 @@ export function renderBlocksToHtml(blocks: Block[], options: RenderOptions): str
 .adv-offer-btn{transition:transform 0.15s ease,box-shadow 0.15s ease;}
 .adv-offer-btn:hover{transform:translateY(-1px);}
 @media(max-width:640px){
-  .adv-content{padding:20px 16px!important;font-size:1rem!important;}
-  .adv-content h1{font-size:2rem!important;letter-spacing:-0.01em!important;}
-  .adv-content h2{font-size:1.6rem!important;}
-  .adv-content h3{font-size:1.3rem!important;}
-  .adv-content p{font-size:1rem!important;}
+  .adv-content{padding:20px 16px!important;font-size:16px!important;}
+  .adv-content h1{font-size:28px!important;letter-spacing:-0.01em!important;}
+  .adv-content h2{font-size:24px!important;}
+  .adv-content h3{font-size:20px!important;}
+  .adv-content p{font-size:16px!important;line-height:1.7!important;}
   .adv-testimonials-grid{grid-template-columns:1fr!important;}
   .adv-stats-grid{grid-template-columns:repeat(2,1fr)!important;}
-  .adv-stats-grid>div>div:first-child{font-size:2.5rem!important;}
+  .adv-stats-grid>div>div:first-child{font-size:40px!important;}
   .adv-timeline-grid{grid-template-columns:1fr 1fr!important;}
   .adv-timeline-wrapper{padding:20px 16px!important;margin:32px 0!important;}
-  .adv-cta-primary{padding:32px 18px!important;margin:32px 0!important;}
-  .adv-cta-primary h2{font-size:1.55rem!important;}
-  .adv-offer-box{padding:24px 18px!important;flex-direction:column!important;text-align:center!important;}
-  .adv-offer-btn{width:100%!important;padding:16px!important;}
+  .adv-cta-primary{padding:28px 16px!important;margin:28px 0!important;}
+  .adv-cta-primary h2{font-size:22px!important;}
+  .adv-offer-box{padding:20px 16px!important;flex-direction:column!important;text-align:center!important;}
+  .adv-offer-btn{width:100%!important;padding:14px!important;}
   .adv-img-placeholder{height:200px!important;}
-  .adv-social-proof{gap:10px!important;padding:14px 12px!important;font-size:0.875rem!important;}
+  .adv-social-proof{gap:10px!important;padding:14px 12px!important;font-size:14px!important;}
   .adv-numbered-section{margin-bottom:32px!important;padding-bottom:28px!important;}
-  .adv-numbered-headline{font-size:1.4rem!important;}
+  .adv-numbered-headline{font-size:20px!important;}
   .adv-guarantee-badges{gap:20px!important;padding:20px 12px!important;}
   .adv-proscons-grid{grid-template-columns:1fr!important;}
-  table{font-size:0.85rem!important;}
-  table th,table td{padding:10px 10px!important;}
-  details summary{padding:16px 18px!important;font-size:1rem!important;}
+  table{font-size:13px!important;}
+  table th,table td{padding:10px!important;}
+  details summary{padding:16px 18px!important;font-size:16px!important;}
   .adv-pricing-grid{grid-template-columns:1fr!important;}
 }
 </style>
@@ -593,7 +592,7 @@ export function renderBlocksToHtml(blocks: Block[], options: RenderOptions): str
   }
 })();
 </script>
-<div class="adv-content" style="max-width:800px;margin:0 auto;padding:32px 24px;font-family:inherit;line-height:1.75;color:#374151;font-size:1.1rem;">
+<div class="adv-content" style="max-width:760px;margin:0 auto;padding:40px 28px;font-family:inherit;line-height:1.8;color:#374151;font-size:18px;">
 ${mainHtml}
 </div>`;
 }

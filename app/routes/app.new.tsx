@@ -84,6 +84,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const angle = (formData.get("angle") as AngleType) || "Desire";
     const primaryColor = (formData.get("primaryColor") as string) || "#22c55e";
     const templateId = (formData.get("templateId") as string) || "editorial";
+    // AI intake fields (optional — if provided, use AI generation)
+    const targetCustomer = (formData.get("targetCustomer") as string) || "";
+    const mechanism = (formData.get("mechanism") as string) || "";
+    const proof = (formData.get("proof") as string) || "";
+    const stylePreset = ((formData.get("stylePreset") as string) || "A") as "A" | "B" | "C" | "D";
 
     if (!productId) {
       return json({ error: "Please select a product", step: "generate" }, { status: 400 });
@@ -97,13 +102,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     try {
-      const { title, blocks } = generateFromPremadeTemplate(templateId, {
-        productTitle: product.title,
-        productHandle: product.handle,
-        productDescription: product.description,
-        productImage: product.featuredImage || undefined,
-        angle,
-      });
+      const useAI = !!(targetCustomer.trim() || mechanism.trim());
+      const templateName = PREMADE_TEMPLATES.find((t) => t.id === templateId)?.name || "Template";
+
+      let title: string;
+      let blocks: import("../lib/blocks").Block[];
+
+      if (useAI) {
+        const imageUrls = product.featuredImage ? [product.featuredImage] : [];
+        blocks = await generateBlocksWithAI({
+          productTitle: product.title,
+          productHandle: product.handle,
+          productDescription: product.description,
+          templateId,
+          angle,
+          targetCustomer,
+          mechanism,
+          proof,
+          stylePreset,
+          imageUrls,
+        });
+        title = `${product.title} — ${templateName}`;
+      } else {
+        const result = generateFromPremadeTemplate(templateId, {
+          productTitle: product.title,
+          productHandle: product.handle,
+          productDescription: product.description,
+          productImage: product.featuredImage || undefined,
+          angle,
+        });
+        title = result.title;
+        blocks = result.blocks;
+      }
 
       const html = renderBlocks(blocks, {
         primaryColor,
@@ -111,7 +141,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         productHandle: product.handle,
       });
 
-      const templateName = PREMADE_TEMPLATES.find((t) => t.id === templateId)?.name || "Template";
       return json({
         step: "preview",
         productId,
@@ -681,85 +710,6 @@ function TemplateStep({
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-        {/* AI Generate option */}
-        <div>
-          <div
-            style={{
-              border: selected === "ai-generate" ? "2px solid #7c3aed" : "1.5px dashed #c4b5fd",
-              borderRadius: "12px",
-              backgroundColor: selected === "ai-generate" ? "#f5f3ff" : "#faf9ff",
-              padding: "14px",
-              cursor: "pointer",
-              boxShadow: selected === "ai-generate" ? "0 0 0 2px rgba(124, 58, 237, 0.15)" : "none",
-              transition: "all 0.15s ease",
-            }}
-            onClick={() => onSelect("ai-generate")}
-            role="button"
-            tabIndex={0}
-          >
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="200" blockAlign="center">
-                <Text variant="headingMd" as="h3">Generate with AI</Text>
-                <Badge tone="attention">New</Badge>
-              </InlineStack>
-            </InlineStack>
-
-            <div style={{ display: "grid", gridTemplateColumns: "132px 1fr", gap: "14px", marginTop: "12px" }}>
-              {/* Mini thumbnail */}
-              <div style={{
-                borderRadius: "8px",
-                minHeight: "238px",
-                padding: "8px",
-                background: "linear-gradient(145deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%)",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}>
-                <div style={{ fontSize: "36px" }}>✨</div>
-                <div style={{ fontSize: "7px", color: "#e9d5ff", textAlign: "center", fontWeight: 600, letterSpacing: "0.5px" }}>AI POWERED</div>
-                <div style={{ display: "grid", gap: "4px", width: "100%", padding: "0 4px" }}>
-                  {[90, 70, 85, 60, 75].map((w, i) => (
-                    <div key={i} style={{ height: "3px", borderRadius: "99px", width: `${w}%`, backgroundColor: "rgba(233,213,255,0.5)" }} />
-                  ))}
-                </div>
-              </div>
-
-              {/* Description panel */}
-              <div style={{
-                borderRadius: "8px",
-                minHeight: "238px",
-                padding: "14px",
-                background: "linear-gradient(145deg, #f5f3ff 0%, #ede9fe 100%)",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                gap: "10px",
-              }}>
-                <div style={{ fontSize: "22px", fontWeight: 800, color: "#4c1d95", lineHeight: 1.1 }}>
-                  Describe it.<br />We'll build it.
-                </div>
-                <div style={{ fontSize: "11px", color: "#6d28d9", lineHeight: 1.5 }}>
-                  Tell the AI your audience, tone, and angle — it writes the full page with real copy.
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  {["Custom audience targeting", "Real copy, no placeholders", "Any angle or structure"].map((f) => (
-                    <div key={f} style={{ fontSize: "10px", color: "#5b21b6", display: "flex", alignItems: "center", gap: "5px" }}>
-                      <span style={{ color: "#7c3aed" }}>✓</span> {f}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div style={{ marginTop: "10px" }}>
-              <Text variant="bodySm" as="p" tone="subdued">
-                Describe your target audience, tone, and what you want to highlight — the AI writes a complete, ready-to-publish page.
-              </Text>
-            </div>
-          </div>
-        </div>
-
         {PREMADE_TEMPLATES.map((t) => {
           const theme = getTemplateTheme(t.id);
           return (
@@ -1005,9 +955,15 @@ function ProductStep({
 function AngleStep({
   selected,
   onSelect,
+  aiIntake,
+  onAiChange,
+  selectedProductTitle,
 }: {
   selected: AngleType | "";
   onSelect: (a: AngleType) => void;
+  aiIntake: AIIntake;
+  onAiChange: (updates: Partial<AIIntake>) => void;
+  selectedProductTitle?: string;
 }) {
   return (
     <div>
@@ -1039,6 +995,88 @@ function AngleStep({
             </div>
           </div>
         ))}
+      </div>
+
+      {/* AI Details — optional, shown for all templates */}
+      <div style={{ marginTop: "32px", padding: "24px 28px", border: "1px solid #e1e3e5", borderRadius: "12px", backgroundColor: "#fafafa" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+          <span style={{ fontSize: "16px" }}>✨</span>
+          <Text variant="headingMd" as="h3">Customize with AI</Text>
+          <span style={{ fontSize: "12px", color: "#8c9196", backgroundColor: "#f1f1f1", padding: "2px 10px", borderRadius: "99px" }}>Optional</span>
+        </div>
+        <p style={{ fontSize: "14px", color: "#6d7175", margin: "0 0 20px", lineHeight: "1.5" }}>
+          Fill in the details below and AI will write real, specific copy{selectedProductTitle ? ` for ${selectedProductTitle}` : ""}. Leave blank to get editable placeholder copy instead.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <AIIntakeField
+            label="Who is this for?"
+            hint="Target customer"
+            placeholder="e.g. Women 35–55 who struggle with joint pain after exercise"
+            value={aiIntake.targetCustomer}
+            onChange={(v) => onAiChange({ targetCustomer: v })}
+            rows={3}
+            required={false}
+          />
+          <AIIntakeField
+            label="What makes it different?"
+            hint="Mechanism or unique angle"
+            placeholder="e.g. Liposomal delivery that reaches tissue 3× faster than standard formulas"
+            value={aiIntake.mechanism}
+            onChange={(v) => onAiChange({ mechanism: v })}
+            rows={3}
+            required={false}
+          />
+        </div>
+
+        <AIIntakeField
+          label="What proof do you have?"
+          hint="Reviews, ratings, press, endorsements"
+          placeholder="e.g. 4.8 stars from 12,400+ verified reviews, featured in Men's Health"
+          value={aiIntake.proof}
+          onChange={(v) => onAiChange({ proof: v })}
+          rows={2}
+          required={false}
+        />
+
+        <div style={{ marginBottom: "0" }}>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "#202223", marginBottom: "8px" }}>
+            Page tone
+            <span style={{ fontSize: "12px", fontWeight: 400, color: "#6d7175", marginLeft: "8px" }}>— Sets voice, authority figure, and headline style</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            {AI_STYLE_PRESETS.map((preset) => {
+              const sel = aiIntake.stylePreset === preset.id;
+              return (
+                <div
+                  key={preset.id}
+                  onClick={() => onAiChange({ stylePreset: preset.id })}
+                  role="button"
+                  tabIndex={0}
+                  style={{
+                    border: sel ? `2px solid ${preset.accent}` : `1.5px solid ${preset.border}`,
+                    borderRadius: "10px",
+                    padding: "12px 14px",
+                    cursor: "pointer",
+                    backgroundColor: sel ? preset.bg : "#fff",
+                    transition: "all 0.12s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                    <div style={{
+                      width: "16px", height: "16px", borderRadius: "50%", border: `2px solid ${sel ? preset.accent : "#d2d5d8"}`,
+                      display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    }}>
+                      {sel && <div style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: preset.accent }} />}
+                    </div>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: sel ? preset.accent : "#202223" }}>{preset.name}</span>
+                  </div>
+                  <p style={{ margin: "0 0 0 24px", fontSize: "11px", color: "#6d7175", lineHeight: 1.4 }}>{preset.description}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2552,7 +2590,6 @@ export default function NewAdvertorial() {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [templateId, setTemplateId] = useState("");
-  const [isAiPath, setIsAiPath] = useState(false);
   const [aiIntake, setAiIntake] = useState<AIIntake>({ targetCustomer: "", mechanism: "", proof: "", stylePreset: "", imageUrls: "" });
   const [productId, setProductId] = useState("");
   const [angle, setAngle] = useState<AngleType | "">("");
@@ -2606,7 +2643,7 @@ export default function NewAdvertorial() {
     switch (currentStep) {
       case 0: return !!templateId;
       case 1: return !!productId;
-      case 2: return isAiPath ? (!!aiIntake.targetCustomer.trim() && !!aiIntake.mechanism.trim() && !!aiIntake.proof.trim() && !!aiIntake.stylePreset) : !!angle;
+      case 2: return !!angle;
       case 3: return true;
       default: return false;
     }
@@ -2621,7 +2658,7 @@ export default function NewAdvertorial() {
   const handleBack = () => {
     if (showingPreview) {
       setShowingPreview(false);
-      setCurrentStep(isAiPath ? 2 : 3);
+      setCurrentStep(3);
     } else {
       setCurrentStep((s) => Math.max(s - 1, 0));
     }
@@ -2637,12 +2674,12 @@ export default function NewAdvertorial() {
         </div>
       )}
 
-      {isSubmitting && isAiPath && currentStep === 2 && (
+      {isSubmitting && currentStep === 3 && (aiIntake.targetCustomer || aiIntake.mechanism) && (
         <div style={{ marginBottom: "16px", padding: "14px 18px", backgroundColor: "#f0f6ff", border: "1px solid #c8deff", borderRadius: "10px", display: "flex", alignItems: "center", gap: "12px" }}>
           <div style={{ fontSize: "18px" }}>✨</div>
           <div>
             <Text variant="bodyMd" fontWeight="semibold" as="p">AI is writing your advertorial…</Text>
-            <Text variant="bodySm" tone="subdued" as="p">Writing the full 17-section DR page. Usually takes 20–40 seconds.</Text>
+            <Text variant="bodySm" tone="subdued" as="p">Writing your custom copy. Usually takes 20–40 seconds.</Text>
           </div>
         </div>
       )}
@@ -2677,7 +2714,6 @@ export default function NewAdvertorial() {
               selected={templateId}
               onSelect={(id) => {
                 setTemplateId(id);
-                setIsAiPath(id === "ai-generate");
               }}
             />
           )}
@@ -2688,17 +2724,13 @@ export default function NewAdvertorial() {
               onSelect={(id) => setProductId(id)}
             />
           )}
-          {currentStep === 2 && !isAiPath && (
+          {currentStep === 2 && (
             <AngleStep
               selected={angle}
               onSelect={(a) => setAngle(a)}
-            />
-          )}
-          {currentStep === 2 && isAiPath && (
-            <AIIntakeStep
-              selectedProductTitle={selectedProduct?.title || ""}
               aiIntake={aiIntake}
-              onChange={(updates) => setAiIntake((prev) => ({ ...prev, ...updates }))}
+              onAiChange={(updates) => setAiIntake((prev) => ({ ...prev, ...updates }))}
+              selectedProductTitle={selectedProduct?.title}
             />
           )}
           {currentStep === 3 && (
@@ -2733,30 +2765,7 @@ export default function NewAdvertorial() {
                 Step {currentStep + 1} of {STEPS.length}
               </Text>
 
-              {isAiPath && currentStep === 2 ? (
-                <Form method="post">
-                  <input type="hidden" name="step" value="ai-generate" />
-                  <input type="hidden" name="productId" value={productId} />
-                  <input type="hidden" name="productTitle" value={selectedProduct?.title || ""} />
-                  <input type="hidden" name="productHandle" value={selectedProduct?.handle || ""} />
-                  <input type="hidden" name="productDescription" value={selectedProduct?.description || ""} />
-                  <input type="hidden" name="primaryColor" value={primaryColor} />
-                  <input type="hidden" name="targetCustomer" value={aiIntake.targetCustomer} />
-                  <input type="hidden" name="mechanism" value={aiIntake.mechanism} />
-                  <input type="hidden" name="proof" value={aiIntake.proof} />
-                  <input type="hidden" name="stylePreset" value={aiIntake.stylePreset} />
-                  <input type="hidden" name="imageUrls" value={aiIntake.imageUrls} />
-                  {isModal && <input type="hidden" name="modal" value="true" />}
-                  <Button
-                    submit
-                    variant="primary"
-                    loading={isSubmitting}
-                    disabled={!canContinue()}
-                  >
-                    Generate with AI ✨
-                  </Button>
-                </Form>
-              ) : currentStep < 3 ? (
+              {currentStep < 3 ? (
                 <Button
                   variant="primary"
                   onClick={handleContinue}
@@ -2771,6 +2780,10 @@ export default function NewAdvertorial() {
                   <input type="hidden" name="productId" value={productId} />
                   <input type="hidden" name="angle" value={angle} />
                   <input type="hidden" name="primaryColor" value={primaryColor} />
+                  <input type="hidden" name="targetCustomer" value={aiIntake.targetCustomer} />
+                  <input type="hidden" name="mechanism" value={aiIntake.mechanism} />
+                  <input type="hidden" name="proof" value={aiIntake.proof} />
+                  <input type="hidden" name="stylePreset" value={aiIntake.stylePreset || "A"} />
                   {isModal && <input type="hidden" name="modal" value="true" />}
                   <Button
                     submit
@@ -2778,7 +2791,7 @@ export default function NewAdvertorial() {
                     loading={isSubmitting}
                     disabled={!productId || !angle || !templateId}
                   >
-                    Create Advertorial
+                    {aiIntake.targetCustomer || aiIntake.mechanism ? "Generate with AI ✨" : "Create Advertorial"}
                   </Button>
                 </Form>
               )}
